@@ -1,7 +1,7 @@
 # 採用的公司版本
 
-- 公司設定版本：1.0.0
-- 來源 main commit SHA：974cabd6019435bb6d19b00783234ca504c0287d
+- 公司設定版本：1.0.1
+- 來源 main commit SHA：04ee2abb2da05acefc224c7d623c79af512f358b
 - 建立日期：2026-09-15
-- 最近同步：從公司 main 建立 project/taiwan-mahjong。
-- 公司核心：本輪無修改。
+- 最近同步：2026-09-16，main 合併至 mahjongapp。
+- 員工核心未變更；同步公司底層更新與自動推送制度。
