@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {calculate,handResult,totals,houseTotal,settlement,rulesSnapshot,createGame,validateStore} from '../src/engine.js';
+const settings={title:'測試牌桌',players:['甲','乙','丙','丁'],base:100,unit:20,fee:{mode:'fixed',value:10,minTai:0,trigger:'self'}};
+const hand=(type='self',tai=2)=>({type,tai,winner:0,loser:1,note:''});
+test('胡牌僅放槍者付款，不收東錢',()=>assert.deepEqual(handResult(settings,hand('discard')),{delta:[140,-140,0,0],fee:0}));
+test('自摸三家各付一份，贏家扣東錢',()=>assert.deepEqual(handResult(settings,hand()),{delta:[410,-140,-140,-140],fee:10}));
+test('流局完全不收款',()=>assert.deepEqual(handResult(settings,hand('draw')),{delta:[0,0,0,0],fee:0}));
+test('中途改底台東錢，不重算既有把數',()=>{const g=createGame(settings);g.hands.push({...hand(),rules:rulesSnapshot(g)});g.base=200;g.unit=50;g.fee.value=30;g.hands.push({...hand(),rules:rulesSnapshot(g)});assert.deepEqual(totals(g),[1280,-440,-440,-440]);assert.equal(houseTotal(g),40);});
+test('撤銷還原玩家與東錢',()=>{const g=createGame(settings);g.hands.push({...hand(),rules:rulesSnapshot(g)});g.hands.pop();assert.deepEqual(totals(g),[0,0,0,0]);assert.equal(houseTotal(g),0);});
+test('結算含公帳，轉帳後所有餘額歸零',()=>{const g=createGame(settings);g.hands=[hand(),{...hand('discard',5),winner:2,loser:0}];const b=[...totals(g),houseTotal(g)];assert.equal(b.reduce((a,v)=>a+v,0),0);for(const x of settlement(g)){b[x.from]+=x.amount;b[x.to]-=x.amount;}assert.deepEqual(b,[0,0,0,0,0]);});
+test('拒絕同一人胡牌與放槍、負台數及小數',()=>{assert.throws(()=>calculate(settings,{...hand('discard'),loser:0}));for(const tai of [-1,1.5,101,NaN])assert.throws(()=>calculate(settings,hand('self',tai)));});
+test('東錢不超過贏家收入，零底台不會產生債務',()=>{const s={...settings,base:0,unit:0};assert.deepEqual(handResult(s,hand()),{delta:[0,0,0,0],fee:0});});
+test('關閉東錢與設定不同固定金額',()=>{assert.equal(handResult({...settings,fee:{...settings.fee,mode:'off'}},hand()).fee,0);assert.equal(handResult({...settings,fee:{...settings.fee,value:50}},hand()).fee,50);});
+test('備份 round trip 保留規則、金額、身份',()=>{const g=createGame(settings);g.hands=[{...hand(),rules:rulesSnapshot(g)}];const s={version:1,games:[g],activeId:g.id};assert.deepEqual(validateStore(JSON.parse(JSON.stringify(s))),s);});
+test('拒絕重複姓名、重複牌局與損壞規則快照',()=>{assert.throws(()=>createGame({...settings,players:['甲','甲','丙','丁']}));const g=createGame(settings);assert.throws(()=>validateStore({version:1,games:[g,g],activeId:g.id}));g.hands=[{...hand(),rules:{base:-1,unit:20}}];assert.throws(()=>validateStore({version:1,games:[g],activeId:g.id}));});
+test('多種金額台數均維持玩家加公帳收支平衡',()=>{for(const base of [0,30,100,1000000])for(const unit of [0,10,50,1000000])for(const tai of [0,1,10,100]){const r=handResult({...settings,base,unit},hand('self',tai));assert.equal(r.delta.reduce((a,v)=>a+v,0)+r.fee,0);}});
+
+import {analytics} from '../src/engine.js';
+test('統計含流局、下家循環、自摸率及逐把收支',()=>{const g=createGame(settings);g.hands=[hand('self',2),{...hand('discard',4),winner:1,loser:0},hand('draw')];const a=analytics(g);assert.equal(a.resolved,2);assert.equal(a.draws,1);assert.equal(a.rows[0].selfRate,.5);assert.equal(a.rows[0].winRate,.5);assert.equal(a.rows[0].nextRate,.5);assert.equal(a.rows[3].nextRate,.5);assert.equal(a.rows[0].dealInRate,.5);assert.equal(a.rows[0].averageTai,2);assert.equal(a.trend.length,4);assert.deepEqual(a.trend[2],a.trend[3]);assert.deepEqual(a.trend.at(-1),totals(g));});
+test('空牌局與全流局沒有假造百分比',()=>{const g=createGame(settings);for(const hands of [[],[hand('draw')]]){g.hands=hands;assert.equal(analytics(g).rows[0].winRate,null);assert.equal(analytics(g).rows[0].selfRate,null);}});
+test('頭像相容舊資料，拒絕不合法選項',()=>{assert.doesNotThrow(()=>createGame(settings));assert.doesNotThrow(()=>createGame({...settings,avatars:[0,1,6,7]}));assert.throws(()=>createGame({...settings,avatars:[0,1,2,35]}));});
+
+import {dealerState} from '../src/engine.js';
+test('莊家首莊胡牌加一台，連二加五台',()=>{assert.deepEqual(calculate(settings,{...hand('discard',2),dealer:{index:0,streak:0}}),[160,-160,0,0]);assert.deepEqual(calculate(settings,{...hand('discard',2),dealer:{index:0,streak:2}}),[240,-240,0,0]);});
+test('閒家自摸只有莊家多付，贏家仍扣固定東錢',()=>{assert.deepEqual(handResult(settings,{...hand('self',2),winner:1,dealer:{index:0,streak:1}}),{delta:[-200,470,-140,-140],fee:10});});
+test('閒家彼此胡牌不加莊家台，莊家放槍則加',()=>{assert.deepEqual(calculate(settings,{...hand('discard',2),winner:1,loser:2,dealer:{index:0,streak:2}}),[0,140,-140,0]);assert.deepEqual(calculate(settings,{...hand('discard',2),winner:1,loser:0,dealer:{index:0,streak:2}}),[-240,240,0,0]);});
+test('連莊、流局、換莊與撤銷推導一致',()=>{const g=createGame({...settings,initialDealer:3});g.hands.push({...hand(),winner:3});assert.deepEqual(dealerState(g),{index:3,streak:1,rotations:0});g.hands.push(hand('draw'));assert.equal(dealerState(g).streak,2);g.hands.push(hand('discard'));assert.deepEqual(dealerState(g),{index:0,streak:0,rotations:1});g.hands.pop();assert.deepEqual(dealerState(g),{index:3,streak:2,rotations:0});});
+test('舊牌局不重算，啟用莊家只從新紀錄開始',()=>{const g=createGame(settings);g.hands=[hand('discard')];assert.equal(dealerState(g),null);g.initialDealer=2;g.dealerStartHand=1;assert.deepEqual(dealerState(g),{index:2,streak:0,rotations:0});assert.deepEqual(totals(g),[140,-140,0,0]);});
+
+import {migratePlayers,playerTotals,gameProgress} from '../src/engine.js';
+test('跨局玩家按身分加總，單桌數據仍隔離',()=>{const g1=createGame(settings),g2=createGame({...settings,title:'第二桌'});g1.hands=[hand('self')];g2.hands=[{...hand('discard'),winner:1,loser:0},hand('draw')];const data=migratePlayers({version:1,games:[g1,g2],activeId:g1.id});const id=data.games[0].playerIds[0];const a=playerTotals(data,id);assert.equal(a.games,2);assert.equal(a.wins,1);assert.equal(a.winRate,.5);assert.equal(a.net,270);assert.deepEqual(totals(data.games[0]),[410,-140,-140,-140]);assert.deepEqual(totals(data.games[1]),[-140,140,0,0]);assert.deepEqual(migratePlayers(data),data);});
+test('同名不同ID不合併，16次換莊才完成一將',()=>{const g=createGame({...settings,initialDealer:0});for(let i=0;i<16;i++)g.hands.push({...hand('discard'),winner:(i+1)%4,loser:i%4});assert.equal(gameProgress(g).completed,1);const d=migratePlayers({version:1,games:[g],activeId:g.id});const other={id:'different',name:'甲',avatar:0};d.players.push(other);assert.equal(playerTotals(d,other.id).games,0);});
+
+import {taipeiDate} from '../src/engine.js';
+test('台灣跨日年月篩選與個人統計',()=>{const a=createGame({...settings,createdAt:'2025-12-31T16:30:00Z'}),b=createGame({...settings,createdAt:'2025-12-31T15:30:00Z'});a.hands=[hand('self')];b.hands=[hand('discard')];const s=migratePlayers({version:1,games:[a,b],activeId:a.id}),id=s.games[0].playerIds[0];assert.equal(taipeiDate(a.createdAt),'2026-01-01');assert.equal(playerTotals(s,id,'2026').games,1);assert.equal(playerTotals(s,id,'2026-01').net,410);assert.equal(playerTotals(s,id,'2025-12-31').net,140);assert.equal(playerTotals(s,id,'2024').hands,0);});
+test('最大台數金額、摸魚率及波動以逐把淨額計算',()=>{const g=createGame(settings);g.hands=[hand('discard',3),hand('draw'),{...hand('discard',1),winner:2,loser:1}];const r=analytics(g).rows[0];assert.equal(r.maxTai,3);assert.equal(r.maxWin,160);assert.equal(r.maxLoss,0);assert.equal(r.idle,2);assert.equal(r.active,1);assert.equal(r.idleRate,2/3);assert.ok(r.volatility>0);assert.equal(r.selfShare,0);});
+test('35款頭像範圍與數量正確',async()=>{const {avatarNames,avatarSvg}=await import('../src/avatars.js');assert.equal(avatarNames.length,35);assert.equal(avatarNames.filter(n=>n.startsWith('女')).length,27);assert.equal(avatarNames.filter(n=>n.startsWith('男')).length,8);assert.doesNotThrow(()=>createGame({...settings,avatars:[31,32,33,34]}));assert.match(avatarSvg(34),/portraits-35/);});
