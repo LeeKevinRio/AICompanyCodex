@@ -28,3 +28,12 @@ Git 不能同時建立 `project/app-a` 與 `project/app-a/login`，因為分支�
 ## 初次建置
 
 本次公司初版直接準備於 main 工作目錄；尚未提交的內容不構成 Git 版本或已核准發布。後續公司更新再使用公司變更分支。只在有對應工作時建立分支，不建立空白 APP 分支。
+
+
+## 公司底層與 APP 同步（創辦人授權，2026-09-16）
+
+`main` 是員工能力、思考方式、人設與公司制度的唯一正式來源。員工相關更新先在 `company-member/<change-id>` 完成，再合併至 main；不得只在 APP 分支改員工核心。
+
+麻將 APP 的指定長期分支是 `mahjongapp`。公司底層一旦更新，必須同步合併至 mahjongapp，處理相容性並執行相關檢查，同時更新 project/company-version.md 的公司版本與來源 commit SHA。此同步與兩邊推送已由創辦人授權，無需逐次重問；如有衝突或測試失敗先修復，不強制推送。
+
+麻將 APP 每輪變更完成且檢查通過後，自動 commit/push 到 origin/mahjongapp。APP 專用功能與專案記憶不回流 main。其他 APP 依各自授權安排同步。推送程式碼不代表正式部署或產品驗收通過。
