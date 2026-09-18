@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="好麻：好字麻將牌">
+<defs><linearGradient id="jade" x2="1" y2="1"><stop stop-color="#286454"/><stop offset="1" stop-color="#103b32"/></linearGradient><linearGradient id="ivory" x2="0" y2="1"><stop stop-color="#fff8df"/><stop offset="1" stop-color="#e4d5ab"/></linearGradient></defs>
+<rect width="128" height="128" rx="28" fill="url(#jade)"/>
+<rect x="27" y="18" width="78" height="98" rx="15" fill="#092c27" opacity=".5"/>
+<rect x="23" y="13" width="82" height="99" rx="15" fill="#a89d70"/>
+<rect x="23" y="10" width="82" height="94" rx="15" fill="url(#ivory)"/>
+<path d="M34 27h60" stroke="#fffdf1" stroke-width="3" stroke-linecap="round"/>
+<g fill="none" stroke="#bc543c" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
+<path d="M48 36 39 62 60 77"/>
+<path d="M35 48h26Q58 71 36 81M68 39h23L78 52v25q0 7-11 3M64 59h30"/>
+</g><circle cx="64" cy="94" r="3" fill="#b9a16c"/>
+</svg>
+
