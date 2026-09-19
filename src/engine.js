@@ -17,8 +17,9 @@ export function calculate(s,h){
  const delta=[0,0,0,0];if(h.type==='draw')return delta;
  if(!integer(h.winner,3)||!integer(h.tai,100))throw Error('請選擇贏家，總台數為 0～100 的整數。');
  if(h.dealer&&(!integer(h.dealer.index,3)||!integer(h.dealer.streak,10000)))throw Error('莊家狀態不正確。');
+ const multiplier=h.multiplier??1;if(!Number.isInteger(multiplier)||multiplier<1||multiplier>100)throw Error('倍率需為1～100整數');
  const extra=h.dealer?1+2*h.dealer.streak:0;
- const payment=payer=>s.base+s.unit*(h.tai+(h.dealer&&(h.winner===h.dealer.index||payer===h.dealer.index)?extra:0));
+ const payment=payer=>(s.base+s.unit*(h.tai+(h.dealer&&(h.winner===h.dealer.index||payer===h.dealer.index)?extra:0)))*multiplier;
  const amount=payment(h.loser);
  if(h.type==='discard'){
   if(!integer(h.loser,3)||h.loser===h.winner)throw Error('胡牌與放槍玩家不能相同。');
