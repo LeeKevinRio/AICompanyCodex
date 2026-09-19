@@ -1,0 +1,7 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createGame,adjustmentDelta,totals,analytics,dealerState,reviseHand,validateStore,rulesSnapshot} from '../src/engine.js';
+const game=()=>createGame({title:'修正測試',players:['甲','乙','丙','丁'],base:100,unit:20,initialDealer:0,fee:{mode:'off',value:0,minTai:0,trigger:'self'}});
+test('詐胡賠三家納入餘額但不影響牌局統計與莊家',()=>{const g=game();g.adjustments=[{delta:[-300,100,100,100],note:'詐胡',createdAt:new Date().toISOString()}];assert.deepEqual(totals(g),[-300,100,100,100]);assert.equal(analytics(g).resolved,0);assert.equal(analytics(g).rows[0].wins,0);assert.equal(dealerState(g).streak,0);assert.deepEqual(validateStore(JSON.parse(JSON.stringify({version:1,games:[g],activeId:g.id}))).games[0].adjustments,g.adjustments);});
+test('拒絕不平衡、零差額、小數或缺原因的調整',()=>{for(const a of [{delta:[100,0,0,0],note:'x'},{delta:[0,0,0,0],note:'x'},{delta:[-1.5,1.5,0,0],note:'x'},{delta:[-100,100,0,0],note:''}])assert.throws(()=>adjustmentDelta(a));});
+test('修正歷史勝者重算後續莊家且保留規則與原紀錄',()=>{const g=game();for(let i=0;i<2;i++)g.hands.push({type:'discard',winner:0,loser:1,tai:1,note:'',createdAt:'2026-09-19T00:00:00Z',rules:rulesSnapshot(g),dealer:dealerState(g)});const next=reviseHand(g,0,{...g.hands[0],winner:1,loser:2});assert.equal(g.hands[1].dealer.index,0);assert.equal(next.hands[1].dealer.index,1);assert.equal(next.hands[1].dealer.streak,0);assert.equal(next.hands[1].rules.unit,20);assert.equal(next.revisions.length,1);assert.equal(next.hands[0].createdAt,g.hands[0].createdAt);});
