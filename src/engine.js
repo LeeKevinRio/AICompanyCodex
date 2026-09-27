@@ -37,6 +37,24 @@ export function adjustmentDelta(a){if(!a||!Array.isArray(a.delta)||a.delta.lengt
 export function totals(game){const base=game.hands.reduce((a,h)=>handResult(game,h).delta.map((x,i)=>x+a[i]),[0,0,0,0]);return (game.adjustments??[]).reduce((sum,a)=>adjustmentDelta(a).map((v,i)=>v+sum[i]),base);}
 export function reviseHand(game,index,replacement){if(!Number.isInteger(index)||index<0||index>=game.hands.length)throw Error('找不到紀錄');const next=structuredClone(game);next.hands[index]={...replacement,createdAt:game.hands[index].createdAt,rules:game.hands[index].rules??rulesSnapshot(game)};for(let i=index;i<next.hands.length;i++){const h=next.hands[i];if(next.initialDealer!==undefined&&i>=(next.dealerStartHand??0))h.dealer=dealerState({...next,hands:next.hands.slice(0,i)});else delete h.dealer;handResult(next,h);}next.revisions??=[];next.revisions.push({index,before:structuredClone(game.hands[index]),after:structuredClone(next.hands[index]),at:new Date().toISOString()});return next;}
 export function houseTotal(game){return game.hands.reduce((sum,h)=>sum+handResult(game,h).fee,0);}
+export function reviseAdjustment(game,index,replacement){
+ if(game.endedAt)throw Error('請先重新開啟牌局');
+ if(!Number.isInteger(index)||!game.adjustments?.[index])throw Error('找不到收付紀錄');
+ adjustmentDelta(replacement);
+ const next=structuredClone(game),before=next.adjustments[index];
+ next.adjustments[index]={...structuredClone(replacement),createdAt:before.createdAt};
+ next.adjustmentRevisions??=[];
+ next.adjustmentRevisions.push({index,before,after:structuredClone(next.adjustments[index]),at:new Date().toISOString()});
+ return next;
+}
+export function restoreRecentGame(current,before,expected){
+ if(!current||current.endedAt||JSON.stringify(current)!==JSON.stringify(expected))throw Error('牌局已變更，請到紀錄頁確認後修正');
+ return structuredClone(before);
+}
+export function assertBalanced(game){
+ if(totals(game).reduce((a,b)=>a+b,houseTotal(game))!==0)throw Error('帳務不平衡，尚未保存');
+ return game;
+}
 export function rulesSnapshot(game){return {base:game.base,unit:game.unit,fee:structuredClone(game.fee??{mode:'off',value:0,minTai:0,trigger:'self'})};}
 export function settlement(game){
  const b=[...totals(game),houseTotal(game)];const debt=b.map((v,i)=>({i,n:-v})).filter(x=>x.n>0),credit=b.map((v,i)=>({i,n:v})).filter(x=>x.n>0),out=[];
