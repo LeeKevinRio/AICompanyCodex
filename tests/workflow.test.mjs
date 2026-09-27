@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createGame,reviseAdjustment,restoreRecentGame,assertBalanced,totals,dealerState,analytics} from '../src/engine.js';
+import {moneyTrend,ledgerEvents,createGame,reviseAdjustment,restoreRecentGame,assertBalanced,totals,dealerState,analytics} from '../src/engine.js';
 const game=()=>createGame({title:'流程測試',players:['甲','乙','丙','丁'],base:100,unit:20,initialDealer:0});
 test('修正收付保留原時間與修改歷程，不改莊家及打牌統計',()=>{
  const g=game();g.adjustments=[{delta:[-300,100,100,100],note:'詐胡',createdAt:'2026-09-27T01:00:00Z'}];
@@ -16,4 +16,13 @@ test('立即撤銷僅允許還原未再變動的同一牌局',()=>{
  const changed=structuredClone(after);changed.hands.push({type:'draw',note:''});
  assert.throws(()=>restoreRecentGame(changed,before,after));
  assert.throws(()=>restoreRecentGame({...after,endedAt:new Date().toISOString()},before,after));
+});
+
+test('全部曲線依時間整合收付，終值對齊結算；打牌曲線排除收付',()=>{
+ const g=game();g.hands=[{type:'discard',winner:0,loser:1,tai:1,note:'',createdAt:'2026-09-27T02:00:00Z'}];
+ g.adjustments=[{delta:[-300,100,100,100],note:'詐胡',createdAt:'2026-09-27T01:00:00Z'}];
+ assert.equal(ledgerEvents(g)[0].kind,'adjustment');
+ assert.deepEqual(moneyTrend(g,'all').at(-1),totals(g));
+ assert.deepEqual(moneyTrend(g,'play').at(-1),[120,-120,0,0]);
+ assert.deepEqual(moneyTrend(game(),'all'),[[0,0,0,0]]);
 });

@@ -55,6 +55,17 @@ export function assertBalanced(game){
  if(totals(game).reduce((a,b)=>a+b,houseTotal(game))!==0)throw Error('帳務不平衡，尚未保存');
  return game;
 }
+export function ledgerEvents(game){
+ const events=game.hands.map((h,index)=>({kind:'hand',index,at:h.createdAt??game.createdAt,...handResult(game,h)}));
+ for(const [index,a] of (game.adjustments??[]).entries())events.push({kind:'adjustment',index,at:a.createdAt??game.createdAt,delta:adjustmentDelta(a),fee:0});
+ const time=e=>Number.isFinite(Date.parse(e.at))?Date.parse(e.at):Date.parse(game.createdAt);
+ return events.sort((a,b)=>time(a)-time(b));
+}
+export function moneyTrend(game,scope='play'){
+ const trend=[[0,0,0,0]];
+ for(const e of ledgerEvents(game))if(scope==='all'||e.kind==='hand')trend.push(e.delta.map((v,i)=>v+trend.at(-1)[i]));
+ return trend;
+}
 export function rulesSnapshot(game){return {base:game.base,unit:game.unit,fee:structuredClone(game.fee??{mode:'off',value:0,minTai:0,trigger:'self'})};}
 export function settlement(game){
  const b=[...totals(game),houseTotal(game)];const debt=b.map((v,i)=>({i,n:-v})).filter(x=>x.n>0),credit=b.map((v,i)=>({i,n:v})).filter(x=>x.n>0),out=[];
