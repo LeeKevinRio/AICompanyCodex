@@ -1,2 +1,10 @@
 <!doctype html>
-<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#173f35"><meta name="description" content="好麻：四人台灣麻將牌局記錄、底台計分與結算。"><title>好麻｜台灣麻將記錄</title><link rel="icon" href="/favicon.svg?v=haoma-b"><link rel="stylesheet" href="/style.css"></head><body><div id="app"></div><div id="toast" role="status" aria-live="polite"></div><dialog id="dialog"></dialog><script type="module" src="/app.js"></script></body></html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#173f35"><meta name="description" content="好麻：四人台灣麻將牌局記錄、底台計分與結算。"><title>好麻｜台灣麻將記錄</title><link rel="icon" href="/favicon.svg?v=haoma-b"><link rel="stylesheet" href="/style.css"><style>
+.boot-splash{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:#101916;color:#e9eddf;pointer-events:none;animation:boot-away 1.65s ease both}
+.boot-brand{display:flex;flex-direction:column;align-items:center;gap:20px;animation:boot-arrive 1.15s cubic-bezier(.2,.7,.3,1) both}
+.boot-brand img{width:88px;height:88px;filter:drop-shadow(0 10px 24px #0003)}
+.boot-brand span{font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;font-size:32px;font-weight:600;letter-spacing:.18em;padding-left:.18em}
+@keyframes boot-arrive{0%{opacity:0;transform:translateY(8px) scale(.97)}55%,100%{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes boot-away{0%,66%{opacity:1;visibility:visible}100%{opacity:0;visibility:hidden}}
+@media(prefers-reduced-motion:reduce){.boot-splash{display:none;animation:none}.boot-brand{animation:none}}
+</style></head><body><div class="boot-splash" id="boot-splash" aria-hidden="true"><div class="boot-brand"><img src="/favicon.svg?v=haoma-b" alt="" width="88" height="88"><span>好麻</span></div></div><div id="app"></div><div id="toast" role="status" aria-live="polite"></div><dialog id="dialog"></dialog><script type="module" src="/app.js"></script></body></html>
