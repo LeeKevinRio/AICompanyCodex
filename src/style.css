@@ -80,3 +80,5 @@ input[type=number][readonly]{appearance:textfield}input[type=number][readonly]::
 .current-round{font-size:18px;font-weight:700;margin:16px 0 8px;line-height:1.5}.record-actions .btn{min-height:44px}#toast .btn{margin-left:12px;background:#fff;color:#173f35}#toast{font-size:15px}
 
 [data-ledger-event]{cursor:pointer}[data-ledger-event]:hover,[data-ledger-event]:focus-visible{background:#839c7822;outline:2px solid var(--green);outline-offset:-2px}.analytics-chart .segmented{max-width:360px}.unified-ledger .table-scroll{overflow:visible;max-height:none}.unified-ledger td{font-variant-numeric:tabular-nums}
+
+.share-preview{display:block;width:100%;height:auto;border-radius:14px;margin:14px 0}.list-group{font-size:16px;margin:14px 0 0}.game-list .game-list-row{min-width:0}

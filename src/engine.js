@@ -1,6 +1,7 @@
 export const WINDS=['東','南','西','北'];
 function integer(n,max=1000000){return Number.isSafeInteger(n)&&n>=0&&n<=max;}
 export function validateSettings(s){
+ if(s?.practice!==undefined&&typeof s.practice!=='boolean')throw Error('練習模式格式不正確');
  if(!s||!Array.isArray(s.players)||s.players.length!==4||s.players.some(n=>typeof n!=='string'||!n.trim()||n.trim().length>12))throw Error('請填寫四位玩家姓名，每位最多 12 字。');
  if(new Set(s.players.map(n=>n.trim())).size!==4)throw Error('四位玩家請使用不同名稱。');
  if(!integer(s.base)||!integer(s.unit))throw Error('底與每台金額需為 0～1,000,000 的整數。');
@@ -66,6 +67,14 @@ export function moneyTrend(game,scope='play'){
  for(const e of ledgerEvents(game))if(scope==='all'||e.kind==='hand')trend.push(e.delta.map((v,i)=>v+trend.at(-1)[i]));
  return trend;
 }
+export function rematchSettings(game,now=new Date().toISOString()){
+ if(game.practice)throw Error('請選擇正式牌局');
+ return {title:(game.title+' 再一桌').slice(0,40),createdAt:now,players:[...game.players],playerIds:[...(game.playerIds??[])],avatars:[...(game.avatars??[0,1,2,3])],initialDealer:game.initialDealer??0,...rulesSnapshot(game)};
+}
+export function singleGameBackup(store,id){
+ const g=store.games.find(g=>g.id===id);if(!g)throw Error('找不到牌局');
+ return validateStore(structuredClone({version:1,players:(store.players??[]).filter(p=>g.playerIds?.includes(p.id)),games:[g],activeId:g.endedAt?null:g.id}));
+}
 export function rulesSnapshot(game){return {base:game.base,unit:game.unit,fee:structuredClone(game.fee??{mode:'off',value:0,minTai:0,trigger:'self'})};}
 export function settlement(game){
  const b=[...totals(game),houseTotal(game)];const debt=b.map((v,i)=>({i,n:-v})).filter(x=>x.n>0),credit=b.map((v,i)=>({i,n:v})).filter(x=>x.n>0),out=[];
@@ -99,11 +108,11 @@ export function dealerState(game){
 
 export function migratePlayers(data){
  const next=structuredClone(data);next.players??=[];
- for(const g of next.games){if(g.playerIds)continue;g.playerIds=g.players.map((name,i)=>{let p=next.players.find(p=>p.name===name);if(!p){p={id:crypto.randomUUID(),name,avatar:g.avatars?.[i]??i};next.players.push(p);}return p.id;});}return next;
+ for(const g of next.games){if(g.practice||g.playerIds)continue;g.playerIds=g.players.map((name,i)=>{let p=next.players.find(p=>p.name===name);if(!p){p={id:crypto.randomUUID(),name,avatar:g.avatars?.[i]??i};next.players.push(p);}return p.id;});}return next;
 }
 export function playerTotals(data,id,period=''){
  const result={games:0,hands:0,resolved:0,wins:0,self:0,dealIn:0,tai:0,fee:0,net:0,playNet:0,maxTai:null,maxWin:0,maxLoss:0,idle:0,active:0,sumSq:0,history:[]};
- for(const g of data.games){if(period&&!taipeiDate(g.createdAt).startsWith(period))continue;const i=g.playerIds?.indexOf(id)??-1;if(i<0)continue;const a=analytics(g),r=a.rows[i];result.games++;result.hands+=g.hands.length;result.resolved+=a.resolved;for(const k of ['wins','self','dealIn','tai','fee','net','playNet'])result[k]+=r[k];result.maxTai=r.maxTai===null?result.maxTai:Math.max(result.maxTai??0,r.maxTai);result.maxWin=Math.max(result.maxWin,r.maxWin);result.maxLoss=Math.max(result.maxLoss,r.maxLoss);result.idle+=r.idle;result.active+=r.active;result.sumSq+=r.sumSq;result.history.push({id:g.id,title:g.title,createdAt:g.createdAt,net:r.net,hands:g.hands.length});}
+ for(const g of data.games){if(g.practice)continue;if(period&&!taipeiDate(g.createdAt).startsWith(period))continue;const i=g.playerIds?.indexOf(id)??-1;if(i<0)continue;const a=analytics(g),r=a.rows[i];result.games++;result.hands+=g.hands.length;result.resolved+=a.resolved;for(const k of ['wins','self','dealIn','tai','fee','net','playNet'])result[k]+=r[k];result.maxTai=r.maxTai===null?result.maxTai:Math.max(result.maxTai??0,r.maxTai);result.maxWin=Math.max(result.maxWin,r.maxWin);result.maxLoss=Math.max(result.maxLoss,r.maxLoss);result.idle+=r.idle;result.active+=r.active;result.sumSq+=r.sumSq;result.history.push({id:g.id,title:g.title,createdAt:g.createdAt,net:r.net,hands:g.hands.length});}
  return {...result,idleRate:result.hands?result.idle/result.hands:null,selfShare:result.wins?result.self/result.wins:null,volatility:result.hands?Math.sqrt(Math.max(0,result.sumSq/result.hands-(result.playNet/result.hands)**2)):null,winRate:result.resolved?result.wins/result.resolved:null,selfRate:result.resolved?result.self/result.resolved:null,dealInRate:result.resolved?result.dealIn/result.resolved:null};
 }
 export function gameProgress(g){const d=dealerState(g);if(!d)return {label:'舊牌局：將數未追蹤',completed:null};const completed=Math.floor(d.rotations/16);return {completed,label:`${completed} 將完成 · 第 ${completed+1} 將 ${WINDS[Math.floor(d.rotations/4)%4]}風 ${d.rotations%4+1} 局`};}
