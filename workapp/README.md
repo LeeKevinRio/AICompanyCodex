@@ -72,3 +72,36 @@ node --check workapp/static/app.js
 這版供個人本機驗收，預設只綁定 `127.0.0.1`。尚未正式部署。
 
 持續運行的部署需要 Python 主機／容器、持久磁碟、程序守護、HTTPS 與登入保護。避免同一資料庫啟動多個 scheduler；多副本需集中排程與鎖。若要公開或多使用者，需加入身份驗證與使用者資料隔離後再發布。原始 SQLite 文件不可放進公開靜態資產。
+
+關鍵字英文採完整詞比對（Unity不會命中community或opportunity），Unity也比對Unity3D；中文仍可比對詞片段。搜尋與定期掃描共用此規則。
+
+### 台灣人力銀行外站搜尋
+搜尋頁提供 104、1111 站內搜尋與 Google 限定該站職缺頁搜尋。連結隨表單條件更新；站內僅帶入關鍵字，Google 帶入關鍵字（逗號 OR）、地點與模式詞。薪資與資格須在原站確認。這是外站入口，尚非職缺擷取或自動掃描整合，不計入列表數量。直接讀取目前遇到 104 空殼／403、1111 TLS 憑證錯誤、Google JavaScript 檢查頁。
+
+### Google 結果直接顯示（SerpApi）
+目前新增 `POST /api/web-search`，獨立於既有 API 職缺列表。搜尋按鈕在網頁內呈現 Google 第一頁收錄的 104／1111 單筆職缺標題與摘要；尚未確認在招、遠端、薪資與台灣應徵資格。薪資條件不套用於此區，不納入自動掃描。
+
+啟用需自行準備 SerpApi 金鑰（服務方案及額度由帳號管理，程式不開通或購買方案）。在啟動伺服器的同一個 PowerShell 視窗執行：
+
+```powershell
+$workappSecureKey = Read-Host 'SerpApi key' -AsSecureString
+$env:WORKAPP_SERPAPI_KEY = [System.Net.NetworkCredential]::new('', $workappSecureKey).Password
+py -3.13 -m workapp.server
+```
+
+先關閉原本的 WorkApp 後端再重啟；`.env` 不會自動載入。不要把金鑰貼進對話、程式碼或 Git。設定後在搜尋頁輸入 Unity，按「搜尋 104／1111」。每次手動搜尋最多一筆 API 請求，查詢快取 6 小時，每小時上限 10 次；來源失敗保留過期快取並明示，不會把讀取失敗當成零職缺。後端測試使用模擬服務回應，未配置真實金鑰前不構成實際接入驗證。
+
+服務文件：https://serpapi.com/search-api
+
+### 104 直接搜尋
+參考使用者 WorkManager 8fd3f43，使用瀏覽器正常載入搜尋頁，再從同一工作階段讀 JSON。104 要求驗證或拒絕讀取時停止並顯示失敗，不會把它當沒有職缺。2026-10-01 本機實測仍被拒絕，尚無成功真實結果。
+
+安裝與啟動（Windows）：
+```powershell
+py -3.13 -m venv .venv
+.venv/Scripts/python.exe -m pip install -r requirements.txt
+.venv/Scripts/python.exe -m playwright install chromium
+.venv/Scripts/python.exe -m workapp.server
+```
+
+在搜尋頁輸入單個關鍵字後按「直接搜尋 104」。讀前兩頁、快取 30 分鐘、失敗冷卻 5 分鐘；篩選後只顯示已讀取部分符合的結果，不是全站總數。尚未納入自動掃描；1111 沒有直接讀取器，Google 仍為需要金鑰的備選。虛擬環境與參考 repo 位於忽略目錄，不推送。

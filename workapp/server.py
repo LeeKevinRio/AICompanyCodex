@@ -69,7 +69,11 @@ def make_handler(service):
                 if not isinstance(data, dict):
                     raise ValueError("請求格式不正確")
                 path = urlparse(self.path).path
-                if path == "/api/rules":
+                if path == "/api/search104":
+                    self.send_json(service.search104.search(validate_filters(data)))
+                elif path == "/api/web-search":
+                    self.send_json(service.web_search.search(validate_filters(data)))
+                elif path == "/api/rules":
                     self.send_json({"id": service.add_rule(data)}, 201)
                 elif path == "/api/scan":
                     self.send_json(service.scan(int(data["id"])))

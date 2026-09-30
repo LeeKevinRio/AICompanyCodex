@@ -34,7 +34,26 @@
         <div class="filter-footer"><label class="check"><input type="checkbox" id="include-unknown" name="include_unknown">仍包含薪資未公開／單位未明列的職缺</label><button type="button" class="text-button" id="reset-filters">重設條件</button></div>
         <p id="salary-help" class="small muted">薪資門檻依職缺公開的薪資上限比較；不同幣別／週期不換算。逗號分隔的關鍵字，符合任一項即可。</p>
       </form>
-      <div class="results-heading"><div><h2>符合條件的工作 <span id="result-count" class="count">—</span></h2><span id="result-context" class="small muted">台灣優先 · 依發布時間排序</span></div><button type="button" id="open-save" class="outline">＋ 儲存為自動掃描</button></div>
+      <section class="external-search" aria-labelledby="external-title">
+        <h2 id="external-title">104 職缺搜尋</h2>
+        <button type="button" class="primary" id="search-104">直接搜尋 104</button>
+        <p class="small muted">直接讀取前兩頁並套用目前篩選；職稱符合優先。每次一個關鍵字，快取 30 分鐘。遠端未明列不視為全遠端；尚未加入自動掃描。</p>
+        <p id="direct-status" role="status" aria-live="polite"></p><div id="direct-jobs" class="jobs"></div>
+        <details><summary>備用：Google 搜尋 104／1111</summary>
+        <p>直接在這裡查看 Google 收錄的職缺，開啟原站才會另開分頁。</p>
+        <button type="button" class="primary" id="search-taiwan">搜尋 104／1111</button>
+        <p class="small muted">依關鍵字、地點與模式詞搜尋第一頁。薪資、台灣應徵資格與遠端安排待原站確認；不套用薪資門檻、不計入下方已驗證條件的數量，尚未加入自動掃描。</p>
+        <p id="taiwan-status" role="status" aria-live="polite"></p>
+        <div id="taiwan-jobs" class="jobs"></div>
+        <details id="search-setup"><summary>接入說明</summary><p>使用 SerpApi 的 Google 搜尋服務。請在啟動後端前設定環境變數 WORKAPP_SERPAPI_KEY，再重新啟動。金鑰只留在後端，不需貼到對話或網頁。</p><p class="small muted">每次手動搜尋最多一筆 API 請求；相同查詢快取 6 小時，每小時最多 10 筆。服務可能計費，請先確認帳號方案與額度。</p><a href="https://serpapi.com/manage-api-key" target="_blank" rel="noopener noreferrer">取得 SerpApi 金鑰 ↗</a></details>
+        </details>
+        <details><summary>備用：到外站搜尋</summary>
+        <p id="external-context"></p>
+        <div id="external-links" class="external-links"></div>
+        <p class="small muted">另開分頁搜尋。Google 會帶入關鍵字、地點與工作模式；薪資需在原站確認。外站結果可能過期，未納入下方數量與自動掃描。</p>
+        </details>
+      </section>
+      <div class="results-heading"><div><h2>已接入來源的工作 <span id="result-count" class="count">—</span></h2><span id="result-context" class="small muted">台灣優先 · 依發布時間排序</span></div><button type="button" id="open-save" class="outline">＋ 儲存為自動掃描</button></div>
       <div id="search-status" role="status" aria-live="polite" class="status"></div>
       <div id="jobs" class="jobs"></div>
       <div class="pagination" id="pagination" hidden><button id="previous" class="outline">上一頁</button><span id="page-label"></span><button id="next" class="outline">下一頁</button></div>

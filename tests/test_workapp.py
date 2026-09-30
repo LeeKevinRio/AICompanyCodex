@@ -52,6 +52,18 @@ class FilteringTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validate_filters(data)
 
+    def test_unity_skill_not_word_fragments(self):
+        filters = validate_filters({"keyword": "UNITY"})
+        for description in ["Join our community", "Equal opportunity employer", "Community Engineer"]:
+            self.assertFalse(matches(job(description=description), filters))
+        for description in ["Unity developer", "Unity3D / C#", "熟悉Unity開發", "Experience with Unity 6"]:
+            self.assertTrue(matches(job(description=description), filters))
+
+    def test_keywords_keep_chinese_and_punctuation_skills(self):
+        for keyword, description in [("遊戲", "開發遊戲系統"), ("C++", "C++ developer"), ("C#", "Unity/C#"), (".NET", ".NET developer")]:
+            self.assertTrue(matches(job(description=description), validate_filters({"keyword": keyword})))
+        self.assertFalse(matches(job(description="JavaScript"), validate_filters({"keyword": "Java"})))
+
 
 class MonitoringTests(unittest.TestCase):
     def setUp(self):

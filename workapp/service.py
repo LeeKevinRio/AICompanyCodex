@@ -8,6 +8,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from .domain import matches, validate_filters
 from .providers import SOURCES, fetch_source
+from .websearch import WebSearch
+from .jobs104 import Search104
 
 
 class Service:
@@ -27,6 +29,8 @@ class Service:
             ''')
             for key in SOURCES:
                 conn.execute("INSERT OR IGNORE INTO sources(id) VALUES (?)", (key,))
+        self.web_search = WebSearch(self.db)
+        self.search104 = Search104(self.db)
 
     @contextmanager
     def db(self):

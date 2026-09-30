@@ -38,6 +38,17 @@ def validate_filters(data):
     return {"keyword": keyword, "location": location, "region": region, "remote": remote, "salary_unit": unit, "salary_min": minimum, "include_unknown": data.get("include_unknown", False) in (True, "true", "1")}
 
 
+def keyword_matches(text, keyword):
+    # Latin skills must not match inside words such as community/opportunity.
+    # ASCII boundaries still allow Chinese text like 熟悉Unity開發.
+    term = re.escape(keyword)
+    if keyword in ("unity", "unity3d", "u3d", "unity engine"):
+        term = r"(?:unity(?:3d| engine)?|u3d)"
+    left = r"(?<![a-z0-9_])" if re.match(r"[a-z0-9_]", keyword) else ""
+    right = r"(?![a-z0-9_])" if re.search(r"[a-z0-9_+#]$", keyword) else ""
+    return re.search(left + term + right, text) is not None
+
+
 def matches(job, filters):
     if filters["region"] == "taiwan" and not job["taiwan"]:
         return False
@@ -47,7 +58,7 @@ def matches(job, filters):
         return False
     keywords = [v.strip().casefold() for v in re.split(r"[,，]", filters["keyword"]) if v.strip()]
     haystack = " ".join(str(job.get(k, "")) for k in ("title", "company", "description", "tags")).casefold()
-    if keywords and not any(keyword in haystack for keyword in keywords):
+    if keywords and not any(keyword_matches(haystack, keyword) for keyword in keywords):
         return False
     if filters["salary_min"]:
         currency, period = filters["salary_unit"].split("/")

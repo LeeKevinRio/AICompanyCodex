@@ -19,6 +19,80 @@ function describe(f) {
   if (f.salary_min) parts.push(`${f.salary_unit} ${Number(f.salary_min).toLocaleString()} 以上${f.include_unknown ? '（含未公開薪資）' : ''}`);
   return parts.join(' · ');
 }
+function renderExternalSearch() {
+  const f = filters();
+  const words = f.keyword.split(/[,，]/).map(w=>w.trim()).filter(Boolean);
+  const quoted = words.map(w=>'"'+w.replace(/["\\]/g,' ')+'"');
+  const keyword = quoted.length > 1 ? '('+quoted.join(' OR ')+')' : (quoted[0] || '');
+  const mode = {remote:'("全遠端" OR "完全遠端" OR "fully remote")',hybrid:'("混合辦公" OR "部分遠端" OR hybrid)',onsite:'("現場辦公" OR "on-site")'}[f.remote] || '';
+  const links = [];
+  for (const [name, domain, base, parameter] of [
+    ['104','104.com.tw/job/','https://www.104.com.tw/jobs/search/','keyword'],
+    ['1111','1111.com.tw/job/','https://www.1111.com.tw/search/job','ks']
+  ]) {
+    const direct = new URL(base); direct.searchParams.set(parameter,words.join(' '));
+    const google = new URL('https://www.google.com/search');
+    google.searchParams.set('q',[`site:${domain}`,keyword,f.location,mode].filter(Boolean).join(' '));
+    for (const [label,url] of [[`${name} 站內搜尋`,direct],[`Google 搜尋 ${name}`,google]]) {
+      const a = el('a','outline',label+' ↗'); a.href=url.href; a.target='_blank'; a.rel='noopener noreferrer'; links.push(a);
+    }
+  }
+  $('external-links').replaceChildren(...links);
+  $('external-context').textContent = (f.keyword || '所有職缺')+' · '+remoteNames[f.remote]+'｜站內搜尋僅帶入關鍵字，其餘條件請在原站設定。';
+}
+let taiwanRequest = 0;
+let directRequest = 0;
+function clearDirectResults() {
+  directRequest++;
+  $('direct-jobs').replaceChildren();
+  $('direct-status').textContent = '條件已變更，請重新搜尋 104。';
+  $('search-104').disabled = false;
+}
+async function search104() {
+  if (!$('search-form').reportValidity()) return;
+  const request = ++directRequest;
+  $('search-104').disabled = true;
+  $('direct-jobs').replaceChildren();
+  $('direct-status').textContent = '正在讀取 104，可能需要約一分鐘…';
+  try {
+    const data = await api('/api/search104', filters());
+    if (request !== directRequest) return;
+    renderJobs('direct-jobs',data.results);
+    $('direct-status').textContent = data.state === 'ready' ? `${data.results.length} 筆符合條件／本次讀取 ${data.fetched_count} 筆 · ${data.cached ? '快取' : '取得'} ${time(data.fetched_at)}；非全站總數。` : data.message;
+    if (data.stale) $('direct-status').textContent += ` 顯示上次資料 ${time(data.fetched_at)}。`;
+  } catch(error) { if(request===directRequest) $('direct-status').textContent=error.message; }
+  finally { if(request===directRequest) $('search-104').disabled=false; }
+}
+function clearTaiwanResults() {
+  clearDirectResults();
+  taiwanRequest++;
+  $('taiwan-jobs').replaceChildren();
+  $('taiwan-status').textContent = '條件已變更，請重新搜尋 104／1111。';
+  $('search-taiwan').disabled = false;
+}
+async function searchTaiwan() {
+  if (!$('search-form').reportValidity()) return;
+  const request = ++taiwanRequest;
+  $('search-taiwan').disabled = true;
+  $('taiwan-status').textContent = '正在搜尋 104／1111…';
+  $('taiwan-jobs').replaceChildren();
+  try {
+    const data = await api('/api/web-search',filters());
+    if (request !== taiwanRequest) return;
+    $('search-setup').open = data.state === 'not_configured';
+    $('taiwan-status').textContent = data.state !== 'ready' ? data.message : `${data.results.length} 筆搜尋線索 · ${data.cached ? '快取' : '取得'} ${time(data.fetched_at)}${data.results.length ? '' : '；不代表兩站沒有相關職缺。'}`;
+    if (data.stale && data.results.length) $('taiwan-status').textContent += ` 顯示上次結果（${time(data.fetched_at)}）。`;
+    $('taiwan-jobs').replaceChildren(...data.results.map(job=>{
+      const card = el('article','search-lead');
+      const title = el('h3'), link = el('a','',job.title);
+      link.href = job.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; title.append(link);
+      card.append(el('span','pill',job.source+' · Google 收錄 · 招募狀態待確認'),title,el('p','',job.description || '搜尋未提供摘要，請查看原始職缺。'));
+      return card;
+    }));
+  } catch(error) {
+    if (request === taiwanRequest) $('taiwan-status').textContent = error.message;
+  } finally { if (request === taiwanRequest) $('search-taiwan').disabled = false; }
+}
 function empty(target, title, message) {
   const node = el('div','empty'); node.append(el('strong','',title), el('p','small',message)); $(target).replaceChildren(node);
 }
@@ -129,8 +203,14 @@ function openSave() {
   status('save-error'); $('save-dialog').showModal(); $('rule-name').focus();
 }
 $('search-form').addEventListener('submit',event=>{event.preventDefault();search();});
+$('search-form').addEventListener('input',renderExternalSearch);
+$('search-form').addEventListener('change',renderExternalSearch);
+$('search-form').addEventListener('input',clearTaiwanResults);
+$('search-form').addEventListener('change',clearTaiwanResults);
+$('search-taiwan').onclick=searchTaiwan;
+$('search-104').onclick=search104;
 $('previous').onclick=()=>search(page-1); $('next').onclick=()=>search(page+1);
-$('reset-filters').onclick=()=>{$('search-form').reset();search();};
+$('reset-filters').onclick=()=>{$('search-form').reset();renderExternalSearch();clearTaiwanResults();search();};
 $('open-save').onclick=openSave; $('cancel-save').onclick=()=>$('save-dialog').close();
 $('new-rule').onclick=()=>{setView('search');$('keyword').focus();};
 $('close-discoveries').onclick=()=>{$('discoveries-section').hidden=true;};
@@ -142,7 +222,7 @@ $('save-form').addEventListener('submit',async event=>{
     $('save-dialog').close(); setView('monitor'); status('monitor-status','條件已儲存，後端會在 30 秒內執行首次掃描。');
   } catch(error) {status('save-error',error.message,true);} finally {$('save-button').disabled=false;}
 });
-search(); loadRules();
+renderExternalSearch(); search(); loadRules();
 setInterval(async()=>{
   if (document.visibilityState==='hidden') return;
   if (view==='monitor' && !document.querySelector('.rule button:disabled')) await loadRules();
