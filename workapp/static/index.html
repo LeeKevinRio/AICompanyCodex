@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="台灣優先的全球職缺搜尋，依關鍵字、薪資與遠端條件持續追蹤新機會。">
+  <title>WorkApp｜尋找下一個機會</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <aside class="rail">
+    <a href="/" class="brand"><span class="brand-mark">w</span><span>workapp<span class="brand-caption">你的工作雷達</span></span></a>
+    <nav aria-label="主要導覽">
+      <button class="nav-item active" data-view="search"><span aria-hidden="true">⌕</span> 搜尋工作</button>
+      <button class="nav-item" data-view="monitor"><span aria-hidden="true">◷</span> 自動掃描 <span id="rule-count" class="badge">0</span></button>
+    </nav>
+    <div class="rail-bottom"><span class="eyebrow">目前範圍</span><strong>從台灣，找到世界。</strong><p>直接連到招募來源，保留職缺的真實地點與應徵限制。</p><span class="version">WORKAPP / 01</span></div>
+  </aside>
+  <main>
+    <header class="topbar"><span>個人工作探索空間</span><span class="top-label">TAIWAN FIRST <span aria-hidden="true">／</span> GLOBAL REACH</span></header>
+    <section id="search-view">
+      <div class="page-heading"><div><p class="eyebrow">JOB EXPLORER</p><h1>下一個機會，<br class="mobile-break">從這裡開始。</h1><p class="muted">找到合適的條件，讓雷達持續替你留意。</p></div><div class="heading-number" aria-hidden="true">01<span>EXPLORE</span></div></div>
+      <form id="search-form" class="search-panel">
+        <div class="search-line"><label class="keyword-label" for="keyword"><span class="sr-only">工作關鍵字</span><span aria-hidden="true">⌕</span><input id="keyword" name="keyword" maxlength="200" placeholder="職稱、技能或公司，例如：工程師, Python" autocomplete="off"></label><button class="primary" type="submit" id="search-button">搜尋工作</button></div>
+        <div class="filters">
+          <label>搜尋範圍<select name="region" id="region"><option value="taiwan">台灣可應徵</option><option value="global">全球職缺</option></select></label>
+          <label>工作模式<select name="remote" id="remote"><option value="any">不限模式</option><option value="remote">全遠端</option><option value="hybrid">混合辦公</option><option value="onsite">現場辦公</option></select></label>
+          <label>工作地點<input name="location" id="location" maxlength="100" placeholder="例如 Taipei、Tokyo"></label>
+          <label>薪資門檻<input name="salary_min" id="salary-min" type="number" min="0" max="100000000" step="1000" placeholder="不限" aria-describedby="salary-help"></label>
+          <label>薪資單位<select name="salary_unit" id="salary-unit"><option value="TWD/month">TWD / 月</option><option value="TWD/year">TWD / 年</option><option value="USD/year">USD / 年</option><option value="USD/month">USD / 月</option></select></label>
+        </div>
+        <div class="filter-footer"><label class="check"><input type="checkbox" id="include-unknown" name="include_unknown">仍包含薪資未公開／單位未明列的職缺</label><button type="button" class="text-button" id="reset-filters">重設條件</button></div>
+        <p id="salary-help" class="small muted">薪資門檻依職缺公開的薪資上限比較；不同幣別／週期不換算。逗號分隔的關鍵字，符合任一項即可。</p>
+      </form>
+      <div class="results-heading"><div><h2>符合條件的工作 <span id="result-count" class="count">—</span></h2><span id="result-context" class="small muted">台灣優先 · 依發布時間排序</span></div><button type="button" id="open-save" class="outline">＋ 儲存為自動掃描</button></div>
+      <div id="search-status" role="status" aria-live="polite" class="status"></div>
+      <div id="jobs" class="jobs"></div>
+      <div class="pagination" id="pagination" hidden><button id="previous" class="outline">上一頁</button><span id="page-label"></span><button id="next" class="outline">下一頁</button></div>
+    </section>
+    <section id="monitor-view" hidden>
+      <div class="page-heading"><div><p class="eyebrow">JOB RADAR</p><h1>讓機會，主動出現。</h1><p class="muted">儲存你的搜尋條件，定期記錄新發現的職缺。</p></div><div class="heading-number" aria-hidden="true">02<span>MONITOR</span></div></div>
+      <div class="monitor-note"><span aria-hidden="true">◷</span><div><strong>網頁關閉後，仍可持續掃描。</strong><p>需保持 WorkApp 後端運行。新發現會記錄在這裡；通知管道尚未設定。</p></div><button class="outline" id="new-rule">＋ 新增條件</button></div>
+      <div id="monitor-status" class="status" role="status" aria-live="polite"></div>
+      <div id="rules" class="rules"></div>
+      <section id="discoveries-section" hidden><div class="results-heading"><h2 id="discoveries-title">掃描結果</h2><button class="text-button" id="close-discoveries">收起</button></div><p class="small muted">「新發現」指這組條件首次記錄的職缺，不一定是剛發布的工作。首次掃描會建立目前符合條件的清單。</p><div id="discoveries" class="jobs"></div></section>
+    </section>
+    <section class="sources-panel"><div class="sources-title"><h2>資料來源</h2><span class="small muted">公開招募資料 · 覆蓋範圍持續擴充</span></div><div id="sources" class="source-grid"></div><p class="small muted">台灣範圍包含明列台灣城市或 Worldwide／Anywhere 的職缺；仍須核對原始應徵限制。僅搜尋已接入來源，尚不涵蓋所有全球職缺或 104。遠端模式未明列的職缺不會被推定為遠端。</p></section>
+    <footer>WORKAPP <span>每個下一步，都值得好好選擇。</span></footer>
+  </main>
+  <dialog id="save-dialog"><form id="save-form"><div class="dialog-heading"><div><p class="eyebrow">CREATE A RADAR</p><h2>儲存自動掃描</h2></div><button type="button" id="cancel-save" class="icon-button" aria-label="關閉">×</button></div><p id="save-summary" class="summary"></p><label>掃描名稱<input name="name" id="rule-name" required maxlength="80" placeholder="例如：台灣 Python 工程師"></label><label>掃描頻率<select name="hours" id="rule-hours"><option value="6">每 6 小時</option><option value="12">每 12 小時</option><option value="24">每天</option></select></label><p class="small muted">儲存後會在 30 秒內進行首次掃描。來源依自身更新頻率讀取：Remotive 每 6 小時，其他來源每 30 分鐘。</p><p class="status" id="save-error" role="alert"></p><button type="submit" id="save-button" class="primary full">建立自動掃描</button></form></dialog>
+</body>
+</html>
