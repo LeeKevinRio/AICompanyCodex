@@ -10,6 +10,8 @@ from .domain import matches, validate_filters
 from .providers import SOURCES, fetch_source
 from .websearch import WebSearch
 from .jobs104 import Search104
+from .platforms import PlatformSearch
+from .domain import keyword_matches
 
 
 class Service:
@@ -31,6 +33,7 @@ class Service:
                 conn.execute("INSERT OR IGNORE INTO sources(id) VALUES (?)", (key,))
         self.web_search = WebSearch(self.db)
         self.search104 = Search104(self.db)
+        self.platforms = PlatformSearch(self.db)
 
     @contextmanager
     def db(self):
@@ -48,11 +51,11 @@ class Service:
             rows = conn.execute("SELECT * FROM sources").fetchall()
         return [dict(row) | {"name": SOURCES[row["id"]]["name"], "refresh_minutes": SOURCES[row["id"]]["ttl"] // 60} for row in rows]
 
-    def refresh(self):
+    def refresh(self, selected=None):
         # Cache lives in SQLite and survives restarts; Remotive at most 4/day.
         with self.refresh_lock:
             now = self.clock()
-            due = [s for s in self.source_status() if (s["last_attempt"] is None or now - s["last_attempt"] >= (SOURCES[s["id"]]["ttl"] if s["id"] == "remotive" or (s["last_success"] is not None and not s["error"]) else 300))]
+            due = [s for s in self.source_status() if (selected is None or s['id'] in selected) and (s["last_attempt"] is None or now - s["last_attempt"] >= (SOURCES[s["id"]]["ttl"] if s["id"] == "remotive" or (s["last_success"] is not None and not s["error"]) else 300))]
             with ThreadPoolExecutor(max_workers=3) as pool:
                 futures = {s["id"]: pool.submit(self.fetcher, s["id"]) for s in due}
                 for key, future in futures.items():
@@ -75,6 +78,23 @@ class Service:
         jobs = [json.loads(r["payload"]) for r in rows]
         result = [job for job in jobs if matches(job, filters)]
         return sorted(result, key=lambda j: (j.get("local_taiwan", j["taiwan"] and not re.search(r"worldwide|anywhere|global", j["location"], re.I)), j["taiwan"], j["published"]), reverse=True)
+
+    def search_all(self, filters):
+        selected = filters.get('sources', ['appier','canonical','remotive'])
+        statuses = [s for s in self.refresh(selected) if s['id'] in selected]
+        jobs = [j for j in self.jobs(filters) if j['source'] in selected and j['source'] in SOURCES]
+        def query(source):
+            if source != '104': return self.platforms.search(source,filters)
+            data = self.search104.search(filters)
+            return data['results'], {'id':'104','name':'104 人力銀行','count':data.get('fetched_count',0),'last_success':data['fetched_at'],'error':data['message'] if data['state']!='ready' else None,'refresh_minutes':30,'note':'前兩頁；非全站職缺','state':data['state']}
+        extra = [s for s in selected if s not in SOURCES]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            for found,status in pool.map(query,extra):
+                jobs.extend(found);statuses.append(status)
+        terms=[v.strip().casefold() for v in re.split('[,，]',filters['keyword']) if v.strip()]
+        jobs=list({j['id']:j for j in jobs}.values())
+        jobs.sort(key=lambda j:(any(keyword_matches(j['title'].casefold(),t) for t in terms),j['taiwan'],j['published']),reverse=True)
+        return jobs,statuses
 
     def rules(self):
         with self.db() as conn:
@@ -124,11 +144,12 @@ class Service:
                 raise ValueError("找不到掃描條件")
             if scheduled and (row["paused"] or row["next_run"] > self.clock()):
                 return None
-            statuses = self.refresh()
+            found, statuses = self.search_all(json.loads(row['filters']))
             warnings = [{"source": s["name"], "error": s["error"]} for s in statuses if s["error"]]
-            found, now, new_count = self.jobs(json.loads(row["filters"])), self.clock(), 0
+            now, new_count = self.clock(), 0
             with self.db() as conn:
                 for job in found:
+                    conn.execute("INSERT INTO jobs(id,source,payload,active) VALUES(?,?,?,1) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,active=1", (job['id'],job['source'],json.dumps(job,ensure_ascii=False)))
                     new_count += conn.execute("INSERT OR IGNORE INTO discoveries(rule_id,job_id,discovered_at) VALUES(?,?,?)", (rule_id, job["id"], now)).rowcount
                 conn.execute("INSERT INTO runs(rule_id,ran_at,matches,new_count,warnings) VALUES(?,?,?,?,?)", (rule_id, now, len(found), new_count, json.dumps(warnings)))
                 conn.execute("UPDATE rules SET last_run=?,next_run=? WHERE id=?", (now, now + row["hours"] * 3600, rule_id))

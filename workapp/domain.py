@@ -35,7 +35,11 @@ def validate_filters(data):
     location = str(data.get("location", "")).strip()
     if len(keyword) > 200 or len(location) > 100:
         raise ValueError("關鍵字或地點過長")
-    return {"keyword": keyword, "location": location, "region": region, "remote": remote, "salary_unit": unit, "salary_min": minimum, "include_unknown": data.get("include_unknown", False) in (True, "true", "1")}
+    sources = data.get('sources', ['appier','canonical','remotive'])
+    allowed = {'appier','canonical','remotive','104','linkedin','cake','indeed','remoteok'}
+    if not isinstance(sources,list) or not sources or any(not isinstance(s,str) or s not in allowed for s in sources):
+        raise ValueError('請至少選擇一個有效的職缺來源')
+    return {"sources": list(dict.fromkeys(sources)), "keyword": keyword, "location": location, "region": region, "remote": remote, "salary_unit": unit, "salary_min": minimum, "include_unknown": data.get("include_unknown", False) in (True, "true", "1")}
 
 
 def keyword_matches(text, keyword):

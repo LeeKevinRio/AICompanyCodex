@@ -105,3 +105,13 @@ py -3.13 -m venv .venv
 ```
 
 在搜尋頁輸入單個關鍵字後按「直接搜尋 104」。讀前兩頁、快取 30 分鐘、失敗冷卻 5 分鐘；篩選後只顯示已讀取部分符合的結果，不是全站總數。尚未納入自動掃描；1111 沒有直接讀取器，Google 仍為需要金鑰的備選。虛擬環境與參考 repo 位於忽略目錄，不推送。
+
+## 多來源搜尋（目前版本）
+搜尋表單可勾選 104、LinkedIn、Cake、Indeed、RemoteOK、Remotive、Appier 官網、Canonical 官網。搜尋和新掃描規則皆保存來源選擇；舊規則維持原三來源。Google 是另行手動啟用的備案。
+
+安裝新增的 HTML 解析依賴：`.venv/Scripts/python.exe -m pip install -r requirements.txt`。
+目前本機 8000 被股票專案占用，請用 `.venv/Scripts/python.exe -m workapp.server --port 8001`，開啟 http://127.0.0.1:8001/。
+
+LinkedIn、Cake、Indeed 只讀公開第一頁卡片（未取得詳細頁全文），104 前兩頁。RemoteOK 與 Remotive 快取六小時，其餘成功快取半小時；查詢來源暫時失敗保留先前結果。RemoteOK 未明示薪資單位／幣別不推測，地區只寫 Remote 不視為台灣可應徵。遠端篩選保守，未知模式不納入全遠端。來源未出現在本次有限搜尋，不代表職缺下架。每個來源獨立顯示失敗／未查詢與已讀取數量，不代表全站總數。
+
+2026-10-01 實測 LinkedIn、RemoteOK 成功；Cake、Indeed、104 失敗。這些來源已有接入程式但未驗證成功，不能宣稱全部網站皆可查到。1111 未加入直接讀取，公司官網目前僅兩家。

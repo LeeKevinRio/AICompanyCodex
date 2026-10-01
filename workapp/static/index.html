@@ -31,13 +31,14 @@
           <label>薪資門檻<input name="salary_min" id="salary-min" type="number" min="0" max="100000000" step="1000" placeholder="不限" aria-describedby="salary-help"></label>
           <label>薪資單位<select name="salary_unit" id="salary-unit"><option value="TWD/month">TWD / 月</option><option value="TWD/year">TWD / 年</option><option value="USD/year">USD / 年</option><option value="USD/month">USD / 月</option></select></label>
         </div>
+<fieldset class="source-picker"><legend>職缺來源</legend><div><label class="check"><input type="checkbox" name="job-source" value="104" checked>104</label><label class="check"><input type="checkbox" name="job-source" value="linkedin" checked>LinkedIn</label><label class="check"><input type="checkbox" name="job-source" value="cake" checked>Cake</label><label class="check"><input type="checkbox" name="job-source" value="indeed" checked>Indeed</label><label class="check"><input type="checkbox" name="job-source" value="remoteok" checked>RemoteOK</label><label class="check"><input type="checkbox" name="job-source" value="remotive" checked>Remotive</label><label class="check"><input type="checkbox" name="job-source" value="appier" checked>Appier 官網</label><label class="check"><input type="checkbox" name="job-source" value="canonical" checked>Canonical 官網</label></div><p class="small muted">公司官網目前涵蓋 Appier、Canonical。來源失敗會分別標示；不是全網搜尋。1111 尚未直接接入。</p></fieldset>
         <div class="filter-footer"><label class="check"><input type="checkbox" id="include-unknown" name="include_unknown">仍包含薪資未公開／單位未明列的職缺</label><button type="button" class="text-button" id="reset-filters">重設條件</button></div>
         <p id="salary-help" class="small muted">薪資門檻依職缺公開的薪資上限比較；不同幣別／週期不換算。逗號分隔的關鍵字，符合任一項即可。</p>
       </form>
-      <section class="external-search" aria-labelledby="external-title">
+      <details class="external-search"><summary>備用搜尋與接入說明</summary>
         <h2 id="external-title">104 職缺搜尋</h2>
         <button type="button" class="primary" id="search-104">直接搜尋 104</button>
-        <p class="small muted">直接讀取前兩頁並套用目前篩選；職稱符合優先。每次一個關鍵字，快取 30 分鐘。遠端未明列不視為全遠端；尚未加入自動掃描。</p>
+        <p class="small muted">直接讀取前兩頁並套用目前篩選；職稱符合優先。每次一個關鍵字，快取 30 分鐘。遠端未明列不視為全遠端；主搜尋已支援按選定來源自動掃描。</p>
         <p id="direct-status" role="status" aria-live="polite"></p><div id="direct-jobs" class="jobs"></div>
         <details><summary>備用：Google 搜尋 104／1111</summary>
         <p>直接在這裡查看 Google 收錄的職缺，開啟原站才會另開分頁。</p>
@@ -52,8 +53,8 @@
         <div id="external-links" class="external-links"></div>
         <p class="small muted">另開分頁搜尋。Google 會帶入關鍵字、地點與工作模式；薪資需在原站確認。外站結果可能過期，未納入下方數量與自動掃描。</p>
         </details>
-      </section>
-      <div class="results-heading"><div><h2>已接入來源的工作 <span id="result-count" class="count">—</span></h2><span id="result-context" class="small muted">台灣優先 · 依發布時間排序</span></div><button type="button" id="open-save" class="outline">＋ 儲存為自動掃描</button></div>
+      </details>
+      <div class="results-heading"><div><h2>符合條件的工作 <span id="result-count" class="count">—</span></h2><span id="result-context" class="small muted">台灣優先 · 依發布時間排序</span></div><button type="button" id="open-save" class="outline">＋ 儲存為自動掃描</button></div>
       <div id="search-status" role="status" aria-live="polite" class="status"></div>
       <div id="jobs" class="jobs"></div>
       <div class="pagination" id="pagination" hidden><button id="previous" class="outline">上一頁</button><span id="page-label"></span><button id="next" class="outline">下一頁</button></div>
@@ -65,9 +66,9 @@
       <div id="rules" class="rules"></div>
       <section id="discoveries-section" hidden><div class="results-heading"><h2 id="discoveries-title">掃描結果</h2><button class="text-button" id="close-discoveries">收起</button></div><p class="small muted">「新發現」指這組條件首次記錄的職缺，不一定是剛發布的工作。首次掃描會建立目前符合條件的清單。</p><div id="discoveries" class="jobs"></div></section>
     </section>
-    <section class="sources-panel"><div class="sources-title"><h2>資料來源</h2><span class="small muted">公開招募資料 · 覆蓋範圍持續擴充</span></div><div id="sources" class="source-grid"></div><p class="small muted">台灣範圍包含明列台灣城市或 Worldwide／Anywhere 的職缺；仍須核對原始應徵限制。僅搜尋已接入來源，尚不涵蓋所有全球職缺或 104。遠端模式未明列的職缺不會被推定為遠端。</p></section>
+    <section class="sources-panel"><div class="sources-title"><h2>資料來源</h2><span class="small muted">公開招募資料 · 覆蓋範圍持續擴充</span></div><div id="sources" class="source-grid"></div><p class="small muted">台灣範圍包含明列台灣城市或 Worldwide／Anywhere 的職缺；仍須核對原始應徵限制。僅搜尋勾選來源；LinkedIn／Cake／Indeed 讀公開列表第一頁，104 前兩頁。遠端模式未明列的職缺不會被推定為遠端。</p></section>
     <footer>WORKAPP <span>每個下一步，都值得好好選擇。</span></footer>
   </main>
-  <dialog id="save-dialog"><form id="save-form"><div class="dialog-heading"><div><p class="eyebrow">CREATE A RADAR</p><h2>儲存自動掃描</h2></div><button type="button" id="cancel-save" class="icon-button" aria-label="關閉">×</button></div><p id="save-summary" class="summary"></p><label>掃描名稱<input name="name" id="rule-name" required maxlength="80" placeholder="例如：台灣 Python 工程師"></label><label>掃描頻率<select name="hours" id="rule-hours"><option value="6">每 6 小時</option><option value="12">每 12 小時</option><option value="24">每天</option></select></label><p class="small muted">儲存後會在 30 秒內進行首次掃描。來源依自身更新頻率讀取：Remotive 每 6 小時，其他來源每 30 分鐘。</p><p class="status" id="save-error" role="alert"></p><button type="submit" id="save-button" class="primary full">建立自動掃描</button></form></dialog>
+  <dialog id="save-dialog"><form id="save-form"><div class="dialog-heading"><div><p class="eyebrow">CREATE A RADAR</p><h2>儲存自動掃描</h2></div><button type="button" id="cancel-save" class="icon-button" aria-label="關閉">×</button></div><p id="save-summary" class="summary"></p><label>掃描名稱<input name="name" id="rule-name" required maxlength="80" placeholder="例如：台灣 Python 工程師"></label><label>掃描頻率<select name="hours" id="rule-hours"><option value="6">每 6 小時</option><option value="12">每 12 小時</option><option value="24">每天</option></select></label><p class="small muted">儲存目前勾選的來源，30 秒內開始首次掃描。Remotive／RemoteOK 快取 6 小時，其他來源 30 分鐘；受限來源會記錄警告。</p><p class="status" id="save-error" role="alert"></p><button type="submit" id="save-button" class="primary full">建立自動掃描</button></form></dialog>
 </body>
 </html>

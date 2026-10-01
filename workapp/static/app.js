@@ -11,12 +11,13 @@ async function api(path, body) {
   return data;
 }
 function filters() {
-  return {keyword:$('keyword').value.trim(),region:$('region').value,remote:$('remote').value,location:$('location').value.trim(),salary_min:Number($('salary-min').value || 0),salary_unit:$('salary-unit').value,include_unknown:$('include-unknown').checked};
+  return {sources:Array.from(document.querySelectorAll('[name="job-source"]:checked')).map(n=>n.value),keyword:$('keyword').value.trim(),region:$('region').value,remote:$('remote').value,location:$('location').value.trim(),salary_min:Number($('salary-min').value || 0),salary_unit:$('salary-unit').value,include_unknown:$('include-unknown').checked};
 }
 function describe(f) {
   const parts = [f.keyword || '所有關鍵字', f.region === 'taiwan' ? '台灣可應徵' : '全球', remoteNames[f.remote]];
   if (f.location) parts.push(f.location);
   if (f.salary_min) parts.push(`${f.salary_unit} ${Number(f.salary_min).toLocaleString()} 以上${f.include_unknown ? '（含未公開薪資）' : ''}`);
+  if (f.sources) parts.push('來源：'+f.sources.join('、'));
   return parts.join(' · ');
 }
 function renderExternalSearch() {
@@ -117,22 +118,24 @@ function renderJobs(target, jobs) { $(target).replaceChildren(...jobs.map(jobCar
 function renderSources(sources) {
   $('sources').replaceChildren(...sources.map(s => {
     const card = el('div','source' + (s.error ? ' error' : ''));
-    card.append(el('strong','',s.name),el('p','',`${s.count} 個職缺 · 更新 ${time(s.last_success)}`));
+    card.append(el('strong','',s.name),el('p','',s.last_success ? `${s.count} 個職缺 · 更新 ${time(s.last_success)}` : '尚未取得資料'));
+    if (s.note) card.append(el('p','',s.note));
     if (s.error) card.append(el('p','',`讀取失敗，保留上次資料：${s.error}`));
-    else card.append(el('p','',`最快每 ${s.refresh_minutes} 分鐘更新`));
+    else if (s.state !== 'skipped') card.append(el('p','',`最快每 ${s.refresh_minutes} 分鐘更新`));
     return card;
   }));
 }
 async function search(newPage = 1) {
   if (searching) return;
+  if (!filters().sources.length) {status('search-status','請至少選擇一個職缺來源。',true);return;}
   searching = true; $('search-button').disabled = true;
   status('search-status','正在讀取招募來源與篩選職缺…');
   const f = newPage === 1 || !displayedFilters ? filters() : displayedFilters;
   try {
-    const data = await api('/api/jobs?' + new URLSearchParams({...f,page:newPage}));
+    const data = await api('/api/search', {...f,page:newPage});
     page = data.page; total = data.total; displayedFilters = f;
     $('result-count').textContent = total.toLocaleString();
-    $('result-context').textContent = `${f.region === 'taiwan' ? '台灣優先' : '台灣職缺優先列出'} · 依發布／更新時間排序`;
+    $('result-context').textContent = `${f.region === 'taiwan' ? '台灣優先' : '台灣職缺優先列出'} · 職稱符合優先 · 已讀取來源內排序`;
     renderJobs('jobs',data.jobs);
     if (!data.jobs.length) empty('jobs','目前沒有符合條件的職缺','試試其他關鍵字、放寬薪資條件，或改選全球職缺。資料來源的覆蓋範圍有限。');
     renderSources(data.sources);
@@ -226,5 +229,5 @@ renderExternalSearch(); search(); loadRules();
 setInterval(async()=>{
   if (document.visibilityState==='hidden') return;
   if (view==='monitor' && !document.querySelector('.rule button:disabled')) await loadRules();
-  try {const data=await api('/api/status');renderSources(data.sources);} catch (_) { /* Search and monitoring show actionable errors on use. */ }
+
 },30000);

@@ -69,7 +69,11 @@ def make_handler(service):
                 if not isinstance(data, dict):
                     raise ValueError("請求格式不正確")
                 path = urlparse(self.path).path
-                if path == "/api/search104":
+                if path == "/api/search":
+                    jobs, statuses = service.search_all(validate_filters(data))
+                    page = max(1, int(data.get('page', 1)))
+                    self.send_json({'jobs':jobs[(page-1)*30:page*30],'total':len(jobs),'page':page,'sources':statuses})
+                elif path == "/api/search104":
                     self.send_json(service.search104.search(validate_filters(data)))
                 elif path == "/api/web-search":
                     self.send_json(service.web_search.search(validate_filters(data)))
