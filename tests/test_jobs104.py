@@ -32,3 +32,13 @@ class Jobs104Tests(unittest.TestCase):
   for k in ('','Unity,Python'):
    self.assertEqual(self.search.search(validate_filters({'keyword':k}))['state'],'needs_keyword')
   self.assertEqual(self.calls,0)
+
+ def test_overseas_currency_is_not_assumed_twd(self):
+  self.row['jobAddrNoDesc']='日本東京';self.row['salaryDesc']='月薪 50,000元'
+  result=normalize_104(self.row);self.assertIsNone(result['currency']);self.assertIsNone(result['salary_max'])
+  self.row['salaryDesc']='月薪 USD 50,000';self.assertEqual(normalize_104(self.row)['currency'],'USD')
+  self.row['jobAddrNoDesc']='台北市';self.row['salaryDesc']='月薪人民幣 50,000';self.assertIsNone(normalize_104(self.row)['currency'])
+ def test_publication_date(self):
+  for date in ('20261001','2026/10/01','2026-10-01'):
+   self.row['appearDate']=date;self.assertEqual(normalize_104(self.row)['published'],'2026-10-01')
+  self.row['appearDate']='20260230';self.assertEqual(normalize_104(self.row)['published'],'')

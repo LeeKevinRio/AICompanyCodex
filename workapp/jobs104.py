@@ -3,6 +3,7 @@ import json
 import re
 import threading
 import time
+from datetime import datetime
 from urllib.parse import urlencode, urlparse
 from .domain import matches, plain_text, keyword_matches
 
@@ -25,7 +26,7 @@ def fetch_104(keyword):
             tab.wait_for_selector('a[href*="/job/"], #app main', timeout=20000)
             for page in (1, 2):
                 api = '/jobs/search/api/jobs?' + urlencode({'keyword':keyword,'order':15,'mode':'s','page':page,'jobsource':'2018indexpoc'})
-                result = tab.evaluate('''async url => { const r = await fetch(url, {credentials:'include',headers:{Accept:'application/json'}}); return {status:r.status,text:await r.text()}; }''', api)
+                result = tab.evaluate('''async url => { const r = await fetch(url, {credentials:'include',headers:{Accept:'application/json'},signal:AbortSignal.timeout(30000)}); return {status:r.status,text:await r.text()}; }''', api)
                 if result['status'] != 200:
                     raise ValueError('104 資料讀取失敗，保留上次結果。')
                 payload = json.loads(result['text'])
@@ -63,7 +64,18 @@ def normalize_104(row):
         except (ValueError,TypeError): return None
     location = plain_text(row.get('jobAddrNoDesc',''))
     taiwan = bool(re.search(r'台[北中南東灣]|臺[北中南東灣]|新北|桃園|新竹|苗栗|彰化|南投|雲林|嘉義|高雄|屏東|宜蘭|花蓮|基隆|澎湖|金門|連江',location))
-    return {'id':'104:'+parsed.path.strip('/').split('/')[-1],'source':'104','source_name':'104 人力銀行','title':title,'company':plain_text(row.get('custName','')),'url':'https://www.104.com.tw'+parsed.path,'description':description,'tags':', '.join(tags),'location':location,'taiwan':taiwan,'local_taiwan':taiwan,'remote':remote,'salary':salary,'salary_min':amount('salaryLow') if period else None,'salary_max':amount('salaryHigh') if period else None,'currency':'TWD' if period else None,'period':period,'published':str(row.get('appearDate') or '')}
+    # Currency must not silently become TWD for overseas postings.
+    currency = 'USD' if re.search(r'USD|US\$|美元',salary,re.I) else 'TWD' if re.search(r'TWD|NT\$|新台幣',salary,re.I) else None
+    foreign = bool(re.search(r'人民幣|日圓|日元|港幣|港元|歐元|英鎊|RMB|CNY|JPY|HKD|EUR|GBP',salary,re.I))
+    if currency is None and taiwan and not foreign: currency = 'TWD'
+    published = str(row.get('appearDate') or '')
+    for fmt in ('%Y%m%d','%Y/%m/%d','%Y-%m-%d'):
+        try:
+            published = datetime.strptime(published,fmt).date().isoformat()
+            break
+        except ValueError: pass
+    else: published = ''
+    return {'id':'104:'+parsed.path.strip('/').split('/')[-1],'source':'104','source_name':'104 人力銀行','title':title,'company':plain_text(row.get('custName','')),'url':'https://www.104.com.tw'+parsed.path,'description':description,'tags':', '.join(tags),'location':location,'taiwan':taiwan,'local_taiwan':taiwan,'remote':remote,'salary':salary,'salary_min':amount('salaryLow') if period and currency else None,'salary_max':amount('salaryHigh') if period and currency else None,'currency':currency if period else None,'period':period,'published':published}
 
 
 class Search104:
