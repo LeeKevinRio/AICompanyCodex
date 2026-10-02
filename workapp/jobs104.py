@@ -17,20 +17,38 @@ def fetch_104(keyword):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         try:
-            context = browser.new_context(locale='zh-TW')
-            tab = context.new_page()
-            response = tab.goto('https://www.104.com.tw/jobs/search/?' + urlencode({'keyword':keyword}), wait_until='domcontentloaded', timeout=45000)
-            if response is None or response.status >= 400:
-                raise ValueError('104 拒絕讀取或暫時無法連線，未取得職缺。')
-            # Wait for normal site content. Do not solve verification challenges.
-            tab.wait_for_selector('a[href*="/job/"], #app main', timeout=20000)
             for page in (1, 2):
-                api = '/jobs/search/api/jobs?' + urlencode({'keyword':keyword,'order':15,'mode':'s','page':page,'jobsource':'2018indexpoc'})
-                result = tab.evaluate('''async url => { const r = await fetch(url, {credentials:'include',headers:{Accept:'application/json'},signal:AbortSignal.timeout(30000)}); return {status:r.status,text:await r.text()}; }''', api)
-                if result['status'] != 200:
-                    raise ValueError('104 資料讀取失敗，保留上次結果。')
-                payload = json.loads(result['text'])
-                rows = payload.get('data')
+                payload = None
+                last_error = None
+                for attempt in range(3):
+                    context = browser.new_context(locale='zh-TW', viewport={'width':1366,'height':900})
+                    try:
+                        tab = context.new_page()
+                        response = tab.goto('https://www.104.com.tw/jobs/search/?' + urlencode({'keyword':keyword}), wait_until='domcontentloaded', timeout=45000)
+                        if response is None: raise ValueError('104 搜尋頁沒有回應')
+                        # Match WorkManager: an initial HTTP status is not the final page state.
+                        try:
+                            tab.wait_for_function("() => document.title && !document.title.includes('Just a moment')", timeout=30000)
+                        except Exception:
+                            pass
+                        tab.wait_for_timeout(1500)
+                        api = '/jobs/search/api/jobs?' + urlencode({'keyword':keyword,'order':15,'mode':'s','page':page,'jobsource':'2018indexpoc'})
+                        for retry in range(5):
+                            result = tab.evaluate("""async url => { const r = await fetch(url, {credentials:'include',headers:{Accept:'application/json'},signal:AbortSignal.timeout(30000)}); return {status:r.status,text:await r.text()}; }""", api)
+                            if result['status'] == 200:
+                                payload = json.loads(result['text'])
+                                break
+                            last_error = ValueError(f"104 第 {page} 頁 API HTTP {result['status']}（搜尋頁 HTTP {response.status}）；等待後仍未取得資料")
+                            tab.wait_for_timeout(2000)
+                        if payload is not None: break
+                    except Exception as exc:
+                        last_error = exc
+                    finally:
+                        context.close()
+                    if attempt < 2: time.sleep(2 ** attempt)
+                if payload is None:
+                    raise ValueError(str(last_error)[:180] if isinstance(last_error,ValueError) else '104 瀏覽器等待／讀取失敗')
+                rows = payload.get('data') if isinstance(payload,dict) else None
                 if isinstance(rows, dict): rows = rows.get('list')
                 if not isinstance(rows, list): raise ValueError('104 回傳格式不完整。')
                 out.extend(rows)
@@ -103,8 +121,8 @@ class Search104:
                 try:
                     jobs=list({j['id']:j for j in (normalize_104(r) for r in self.fetcher(keyword))}.values())
                     fetched,error=now,None
-                except Exception:
-                    error='104 未能完成讀取（可能需要網站驗證或連線失敗）。保留前次資料；不代表沒有職缺。'
+                except Exception as exc:
+                    error=(str(exc)[:180]+'；' if isinstance(exc,ValueError) else '')+'104 未能完成讀取（可能需要網站驗證或連線失敗）。保留前次資料；不代表沒有職缺。'
                 with self.db() as conn:
                     conn.execute('INSERT OR REPLACE INTO search104_cache VALUES(?,?,?,?,?)',(keyword.casefold(),json.dumps(jobs,ensure_ascii=False),fetched,now,error))
             found=[j for j in jobs if matches(j,filters)]

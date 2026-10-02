@@ -42,3 +42,20 @@ class Jobs104Tests(unittest.TestCase):
   for date in ('20261001','2026/10/01','2026-10-01'):
    self.row['appearDate']=date;self.assertEqual(normalize_104(self.row)['published'],'2026-10-01')
   self.row['appearDate']='20260230';self.assertEqual(normalize_104(self.row)['published'],'')
+
+class BrowserFlowTests(unittest.TestCase):
+ def test_initial_403_waits_then_retries_api(self):
+  from unittest.mock import MagicMock,patch
+  from workapp.jobs104 import fetch_104
+  tab=MagicMock();tab.goto.return_value.status=403
+  tab.evaluate.side_effect=[{'status':403,'text':''},{'status':200,'text':'{"data":[{"id":1}]}'},{'status':200,'text':'{"data":[]}'}]
+  ctx=MagicMock();ctx.new_page.return_value=tab
+  browser=MagicMock();browser.new_context.return_value=ctx
+  runtime=MagicMock();runtime.chromium.launch.return_value=browser
+  manager=MagicMock();manager.__enter__.return_value=runtime
+  with patch('playwright.sync_api.sync_playwright',return_value=manager):
+   self.assertEqual(fetch_104('Unity'),[{'id':1}])
+  self.assertEqual(tab.evaluate.call_count,3)
+  self.assertEqual(tab.wait_for_function.call_count,2)
+  self.assertEqual(ctx.close.call_count,2)
+  browser.close.assert_called_once()
