@@ -70,7 +70,7 @@ def make_handler(service):
                     raise ValueError("請求格式不正確")
                 path = urlparse(self.path).path
                 if path == "/api/search":
-                    jobs, statuses = service.search_all(validate_filters(data))
+                    jobs, statuses = service.search_all(validate_filters(data), resume=data.get('continue_search') is True)
                     page = max(1, int(data.get('page', 1)))
                     self.send_json({'jobs':jobs[(page-1)*30:page*30],'total':len(jobs),'page':page,'sources':statuses})
                 elif path == "/api/search104":

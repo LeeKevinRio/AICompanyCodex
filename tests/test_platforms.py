@@ -45,3 +45,50 @@ class PlatformTests(unittest.TestCase):
  def test_unknown_remote_region_not_worldwide(self):
   r=job('remoteok','Unity developer','C','Remote','https://remoteok.com/remote-jobs/123',remote='remote')
   self.assertFalse(r['taiwan']);self.assertIsNone(r['salary_max'])
+
+ def test_linkedin_pagination_aliases_and_dedup(self):
+  from workapp.platforms import fetch_linkedin
+  from urllib.parse import urlparse,parse_qs
+  seen=[]
+  def reader(url,timeout=15):
+   seen.append(url);q=parse_qs(urlparse(url).query)
+   if q.get('start')==['0']:
+    return '<li><h3 class="base-search-card__title">Unity Engineer</h3><a class="base-card__full-link" href="https://tw.linkedin.com/jobs/view/role-1234567"></a><span class="job-search-card__location">Taiwan</span></li>'
+   return ''
+  result=fetch_linkedin(self.f,reader,lambda _:None,max_pages=24)
+  self.assertEqual(len(result['jobs']),1)
+  self.assertEqual(result['jobs'][0]['id'],'linkedin:1234567')
+  self.assertEqual(result['coverage']['pages'],6)
+  self.assertTrue(any('start=1' in u for u in seen))
+  self.assertTrue(any('Unity3D' in u for u in seen));self.assertTrue(any('U3D' in u for u in seen))
+ def test_linkedin_detail_matches_generic_title(self):
+  from workapp.platforms import fetch_linkedin,filter_summary
+  def reader(url,timeout=15):
+   if 'jobPosting/' in url:return '<div class="show-more-less-html__markup">熟悉 Unity 開發</div>'
+   if 'start=0' in url:return '<li><h3 class="base-search-card__title">遊戲工程師</h3><a class="base-card__full-link" href="https://tw.linkedin.com/jobs/view/role-1234567"></a><span class="job-search-card__location">Taiwan</span></li>'
+   return ''
+  result=fetch_linkedin(self.f,reader,lambda _:None)
+  self.assertEqual(result['coverage']['detail_pages'],1)
+  self.assertEqual(len(filter_summary(result['jobs'],self.f)[0]),1)
+ def test_partial_refresh_retains_previous_jobs(self):
+  self.service.search_all(self.f);self.now+=1801
+  self.service.platforms.fetcher=lambda *_:{'jobs':[],'coverage':{'limited':True,'message':'rate limited','pages':1}}
+  jobs,status=self.service.search_all(self.f)
+  self.assertEqual(len(jobs),1);self.assertEqual(status[0]['coverage']['pages'],1);self.assertTrue(status[0]['error'])
+ def test_filter_counts_not_double_counted(self):
+  from workapp.platforms import filter_summary
+  jobs=[job('linkedin','Community manager','C','Taiwan','https://www.linkedin.com/jobs/view/1'),job('linkedin','Unity developer','C','London','https://www.linkedin.com/jobs/view/2')]
+  filtered,reasons=filter_summary(jobs,self.f)
+  self.assertEqual(filtered,[]);self.assertEqual(reasons,{'關鍵字':1,'應徵地區':1})
+
+ def test_resume_respects_cooldown_and_passes_previous_data(self):
+  self.service.search_all(self.f)
+  self.service.search_all(self.f,resume=True)
+  self.assertEqual(len(self.calls),1)
+  self.now+=61
+  previous=[]
+  def fetch(source,f):
+   previous.extend(f['_previous_jobs']);return f['_previous_jobs']
+  self.service.platforms.fetcher=fetch
+  found,status=self.service.search_all(self.f,resume=True)
+  self.assertEqual(len(previous),1);self.assertEqual(len(found),1)

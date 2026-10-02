@@ -10,7 +10,7 @@ from .domain import matches, validate_filters
 from .providers import SOURCES, fetch_source
 from .websearch import WebSearch
 from .jobs104 import Search104
-from .platforms import PlatformSearch
+from .platforms import PlatformSearch, filter_summary
 from .domain import keyword_matches
 
 
@@ -79,12 +79,18 @@ class Service:
         result = [job for job in jobs if matches(job, filters)]
         return sorted(result, key=lambda j: (j.get("local_taiwan", j["taiwan"] and not re.search(r"worldwide|anywhere|global", j["location"], re.I)), j["taiwan"], j["published"]), reverse=True)
 
-    def search_all(self, filters):
+    def search_all(self, filters, resume=False):
         selected = filters.get('sources', ['appier','canonical','remotive'])
         statuses = [s for s in self.refresh(selected) if s['id'] in selected]
         jobs = [j for j in self.jobs(filters) if j['source'] in selected and j['source'] in SOURCES]
+        with self.db() as conn:
+            raw=[json.loads(r['payload']) for r in conn.execute('SELECT payload FROM jobs WHERE active=1')]
+        for status in statuses:
+            matched,excluded=filter_summary([j for j in raw if j['source']==status['id']],filters)
+            status.update(matched=len(matched),excluded=excluded)
+
         def query(source):
-            if source != '104': return self.platforms.search(source,filters)
+            if source != '104': return self.platforms.search(source,filters,resume=resume)
             data = self.search104.search(filters)
             return data['results'], {'id':'104','name':'104 人力銀行','count':data.get('fetched_count',0),'last_success':data['fetched_at'],'error':data['message'] if data['state']!='ready' else None,'refresh_minutes':30,'note':'前兩頁；非全站職缺','state':data['state']}
         extra = [s for s in selected if s not in SOURCES]

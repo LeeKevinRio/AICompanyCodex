@@ -120,22 +120,24 @@ function renderSources(sources) {
     const card = el('div','source' + (s.error ? ' error' : ''));
     card.append(el('strong','',s.name),el('p','',s.last_success ? `${s.count} 個職缺 · 更新 ${time(s.last_success)}` : '尚未取得資料'));
     if (s.note) card.append(el('p','',s.note));
+    if (s.coverage?.pages !== undefined) card.append(el('p','',`已讀 ${s.coverage.pages} 頁、${s.coverage.detail_pages || 0} 筆詳細內容 · ${s.coverage.finished_queries}/${s.coverage.queries} 組查詢到達結尾。${s.coverage.message}`));
+    if (s.matched !== undefined) card.append(el('p','',`符合 ${s.matched} 筆；排除：${Object.entries(s.excluded || {}).map(([k,v])=>`${k} ${v}`).join('、') || '無'}（依序計算，不重複計數）`));
     if (s.error) card.append(el('p','',`讀取失敗，保留上次資料：${s.error}`));
     else if (s.state !== 'skipped') card.append(el('p','',`最快每 ${s.refresh_minutes} 分鐘更新`));
     return card;
   }));
 }
-async function search(newPage = 1) {
+async function search(newPage = 1, continueSearch = false) {
   if (searching) return;
   if (!filters().sources.length) {status('search-status','請至少選擇一個職缺來源。',true);return;}
-  searching = true; $('search-button').disabled = true;
-  status('search-status','正在讀取招募來源與篩選職缺…');
+  searching = true; $('search-button').disabled = true; $('continue-search').disabled=true;
+  status('search-status','正在逐頁搜尋，台灣與全球分開查詢；LinkedIn 最多約 150 秒…');
   const f = newPage === 1 || !displayedFilters ? filters() : displayedFilters;
   try {
-    const data = await api('/api/search', {...f,page:newPage});
+    const data = await api('/api/search', {...f,page:newPage,continue_search:continueSearch});
     page = data.page; total = data.total; displayedFilters = f;
     $('result-count').textContent = total.toLocaleString();
-    $('result-context').textContent = `${f.region === 'taiwan' ? '台灣優先' : '台灣職缺優先列出'} · 職稱符合優先 · 已讀取來源內排序`;
+    $('result-context').textContent = `${f.region === 'taiwan' ? '台灣優先' : '台灣職缺優先列出'} · 職稱符合優先 · 以下是已取得結果，非市場總數`;
     renderJobs('jobs',data.jobs);
     if (!data.jobs.length) empty('jobs','目前沒有符合條件的職缺','試試其他關鍵字、放寬薪資條件，或改選全球職缺。資料來源的覆蓋範圍有限。');
     renderSources(data.sources);
@@ -145,7 +147,7 @@ async function search(newPage = 1) {
     $('previous').disabled = page <= 1; $('next').disabled = page * 30 >= total;
     $('page-label').textContent = `${page} / ${Math.max(1,Math.ceil(total/30))}`;
   } catch (error) { status('search-status',error.message,true); }
-  finally { searching = false; $('search-button').disabled = false; }
+  finally { searching = false; $('search-button').disabled = false; $('continue-search').disabled=false; }
 }
 function setView(next) {
   view = next; $('search-view').hidden = next !== 'search'; $('monitor-view').hidden = next !== 'monitor';
@@ -212,6 +214,7 @@ $('search-form').addEventListener('input',clearTaiwanResults);
 $('search-form').addEventListener('change',clearTaiwanResults);
 $('search-taiwan').onclick=searchTaiwan;
 $('search-104').onclick=search104;
+$('continue-search').onclick=()=>search(1,true);
 $('previous').onclick=()=>search(page-1); $('next').onclick=()=>search(page+1);
 $('reset-filters').onclick=()=>{$('search-form').reset();renderExternalSearch();clearTaiwanResults();search();};
 $('open-save').onclick=openSave; $('cancel-save').onclick=()=>$('save-dialog').close();

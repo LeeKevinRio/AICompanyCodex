@@ -55,6 +55,7 @@
         </details>
       </details>
       <div class="results-heading"><div><h2>符合條件的工作 <span id="result-count" class="count">—</span></h2><span id="result-context" class="small muted">台灣優先 · 依發布時間排序</span></div><button type="button" id="open-save" class="outline">＋ 儲存為自動掃描</button></div>
+      <button type="button" id="continue-search" class="outline">補讀 LinkedIn 工作內容</button><p class="small muted">每次最多補讀 40 筆／60 秒；會沿用已讀內文。兩次讀取至少間隔一分鐘。</p>
       <div id="search-status" role="status" aria-live="polite" class="status"></div>
       <div id="jobs" class="jobs"></div>
       <div class="pagination" id="pagination" hidden><button id="previous" class="outline">上一頁</button><span id="page-label"></span><button id="next" class="outline">下一頁</button></div>
@@ -66,7 +67,7 @@
       <div id="rules" class="rules"></div>
       <section id="discoveries-section" hidden><div class="results-heading"><h2 id="discoveries-title">掃描結果</h2><button class="text-button" id="close-discoveries">收起</button></div><p class="small muted">「新發現」指這組條件首次記錄的職缺，不一定是剛發布的工作。首次掃描會建立目前符合條件的清單。</p><div id="discoveries" class="jobs"></div></section>
     </section>
-    <section class="sources-panel"><div class="sources-title"><h2>資料來源</h2><span class="small muted">公開招募資料 · 覆蓋範圍持續擴充</span></div><div id="sources" class="source-grid"></div><p class="small muted">台灣範圍包含明列台灣城市或 Worldwide／Anywhere 的職缺；仍須核對原始應徵限制。僅搜尋勾選來源；LinkedIn／Cake／Indeed 讀公開列表第一頁，104 前兩頁。遠端模式未明列的職缺不會被推定為遠端。</p></section>
+    <section class="sources-panel"><div class="sources-title"><h2>資料來源</h2><span class="small muted">公開招募資料 · 覆蓋範圍持續擴充</span></div><div id="sources" class="source-grid"></div><p class="small muted">台灣範圍包含明列台灣城市或 Worldwide／Anywhere 的職缺；仍須核對原始應徵限制。僅搜尋勾選來源；LinkedIn 分頁並查詢別名（每輪最多 24 頁／90 秒）；Cake／Indeed 讀公開列表第一頁，104 前兩頁。遠端模式未明列的職缺不會被推定為遠端。</p></section>
     <footer>WORKAPP <span>每個下一步，都值得好好選擇。</span></footer>
   </main>
   <dialog id="save-dialog"><form id="save-form"><div class="dialog-heading"><div><p class="eyebrow">CREATE A RADAR</p><h2>儲存自動掃描</h2></div><button type="button" id="cancel-save" class="icon-button" aria-label="關閉">×</button></div><p id="save-summary" class="summary"></p><label>掃描名稱<input name="name" id="rule-name" required maxlength="80" placeholder="例如：台灣 Python 工程師"></label><label>掃描頻率<select name="hours" id="rule-hours"><option value="6">每 6 小時</option><option value="12">每 12 小時</option><option value="24">每天</option></select></label><p class="small muted">儲存目前勾選的來源，30 秒內開始首次掃描。Remotive／RemoteOK 快取 6 小時，其他來源 30 分鐘；受限來源會記錄警告。</p><p class="status" id="save-error" role="alert"></p><button type="submit" id="save-button" class="primary full">建立自動掃描</button></form></dialog>
