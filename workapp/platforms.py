@@ -80,9 +80,18 @@ def linkedin_plan(filters):
 def fetch_linkedin(filters, reader=request_text, sleep=time.sleep, clock=time.monotonic, max_pages=24, max_seconds=90):
     # Round-robin avoids spending the entire budget on a single location/alias.
     queries=[{'keyword':k,'location':l,'offset':0,'done':False} for k,l in linkedin_plan(filters)]
+    prior_coverage=filters.get('_coverage',{}) if filters.get('_resume') and filters.get('_coverage',{}).get('cursors') else {}
+    cursors={(q['keyword'],q['location']):q for q in prior_coverage.get('cursors',[])}
+    for q in queries:
+        old=cursors.get((q['keyword'],q['location']))
+        if old:
+            q.update(offset=old['offset'],done=old['done'],last=tuple(old.get('last',[])))
     previous={j['id']:j for j in filters.get('_previous_jobs',[])}
-    found={};pages=0;stop='';started=clock();attempts=0
-    while queries and not all(q['done'] for q in queries):
+    found=dict(previous) if filters.get('_resume') else {};pages=0;stop='';started=clock();attempts=0
+    detail_first=bool(prior_coverage.get('unverified_details'))
+    if detail_first and not all(q['done'] for q in queries):
+        stop='先補讀已取得職缺的內文，保留後續分頁進度'
+    while queries and not detail_first and not all(q['done'] for q in queries):
         for q in queries:
             if q['done']: continue
             if pages>=max_pages or clock()-started>=max_seconds:
@@ -93,7 +102,10 @@ def fetch_linkedin(filters, reader=request_text, sleep=time.sleep, clock=time.mo
             try:
                 html=reader(url,timeout=min(15,max(1,max_seconds-(clock()-started))))
                 pages+=1
-                if not html.strip(): q['done']=True;continue
+                document=BeautifulSoup(html,'html.parser')
+                # Guest endpoint ends with a doctype/comment-only document, not always ''.
+                if not document.find() and not document.get_text(strip=True):
+                    q['done']=True;continue
                 rows=parse_cards('linkedin',html,'https://www.linkedin.com')
                 before=len(found)
                 for row in rows:
@@ -108,7 +120,10 @@ def fetch_linkedin(filters, reader=request_text, sleep=time.sleep, clock=time.mo
                 # Offsets advance by the returned page size, not a hardcoded 25.
                 q['offset']+=len(rows)
                 signature=tuple(sorted(r['id'] for r in rows))
-                if signature==q.get('last'): q['done']=True
+                if signature==q.get('last'):
+                    q['offset']-=len(rows)
+                    stop='來源重複回傳同一頁，未確認已到結尾；已保留分頁進度'
+                    break
                 q['last']=signature
             except urllib.error.HTTPError as exc:
                 stop='來源限制請求（HTTP %s），已保留讀到的職缺'%exc.code;break
@@ -134,7 +149,7 @@ def fetch_linkedin(filters, reader=request_text, sleep=time.sleep, clock=time.mo
             break  # Do not keep sending requests when the site rejects details.
     unresolved=len(candidates)-detail_pages
     if unresolved: stop=(stop+'；' if stop else '')+f'{unresolved} 筆工作內容尚未確認，可能漏掉只在內文提到技能的職缺'
-    return {'jobs':list(found.values()),'coverage':{'pages':pages,'detail_pages':detail_pages,'unverified_details':unresolved,'queries':len(queries),'finished_queries':sum(q['done'] for q in queries),'limited':bool(stop),'message':stop or '目前查詢已讀到結尾；仍非全網職缺總數'}}
+    return {'jobs':list(found.values()),'coverage':{'pages':pages+prior_coverage.get('pages',0),'round_pages':pages,'cursors':queries,'detail_pages':detail_pages,'unverified_details':unresolved,'queries':len(queries),'finished_queries':sum(q['done'] for q in queries),'limited':bool(stop),'message':stop or '目前查詢已讀到結尾；仍非全網職缺總數'}}
 
 
 def filter_summary(jobs, filters):
@@ -207,7 +222,7 @@ class PlatformSearch:
             interval=21600 if source=='remoteok' else (300 if error else 1800)
             if not row or now-row['attempted_at']>=interval or (resume and source=='linkedin' and now-row['attempted_at']>=60):
                 try:
-                    incoming=self.fetcher(source,filters|{'_previous_jobs':jobs})
+                    incoming=self.fetcher(source,filters|{'_previous_jobs':jobs,'_coverage':coverage,'_resume':resume or bool(coverage.get('limited') and coverage.get('cursors'))})
                     metadata=incoming.get('coverage',{}) if isinstance(incoming,dict) else {}
                     incoming=incoming.get('jobs') if isinstance(incoming,dict) else incoming
                     if not isinstance(incoming,list):raise ValueError('來源格式錯誤')

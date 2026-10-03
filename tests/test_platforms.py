@@ -92,3 +92,55 @@ class PlatformTests(unittest.TestCase):
   self.service.platforms.fetcher=fetch
   found,status=self.service.search_all(self.f,resume=True)
   self.assertEqual(len(previous),1);self.assertEqual(len(found),1)
+
+ def test_linkedin_resume_advances_cursor_and_preserves_details(self):
+  from workapp.platforms import fetch_linkedin
+  from urllib.parse import urlparse,parse_qs
+  seen=[]
+  def reader(url,timeout=15):
+   q=parse_qs(urlparse(url).query);seen.append(q)
+   offset=int(q['start'][0]);identifier=1234567+offset
+   return f'<li><h3 class="base-search-card__title">Unity Engineer</h3><a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/{identifier}"></a><span class="job-search-card__location">Taiwan</span></li>'
+  first=fetch_linkedin(self.f,reader,lambda _:None,max_pages=3)
+  self.assertTrue(first['coverage']['limited'])
+  first['jobs'][0]['description']='previous detail'
+  seen.clear()
+  second=fetch_linkedin(self.f|{'_resume':True,'_coverage':first['coverage'],'_previous_jobs':first['jobs']},reader,lambda _:None,max_pages=3)
+  self.assertTrue(all(q['start']==['1'] for q in seen))
+  self.assertEqual(second['coverage']['pages'],6)
+  self.assertEqual(len(second['jobs']),2)
+  self.assertEqual(second['jobs'][0]['description'],'previous detail')
+
+ def test_repeated_page_is_not_reported_as_end(self):
+  from workapp.platforms import fetch_linkedin
+  html='<li><h3 class="base-search-card__title">Unity Engineer</h3><a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/1234567"></a></li>'
+  result=fetch_linkedin(self.f,lambda *a,**k:html,lambda _:None)
+  self.assertTrue(result['coverage']['limited'])
+  self.assertEqual(result['coverage']['finished_queries'],0)
+  self.assertEqual(result['coverage']['cursors'][0]['offset'],1)
+
+ def test_comment_only_end_does_not_stop_other_queries(self):
+  from workapp.platforms import fetch_linkedin
+  from urllib.parse import urlparse,parse_qs
+  seen=[]
+  def reader(url,timeout=15):
+   q=parse_qs(urlparse(url).query);seen.append(q)
+   if q['keywords']==['Unity3D'] or q['start']!=['0']:return '<!DOCTYPE html>\n<!----> '
+   return '<li><h3 class="base-search-card__title">Unity Engineer</h3><a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/1234567"></a></li>'
+  result=fetch_linkedin(self.f,reader,lambda _:None)
+  self.assertFalse(result['coverage']['limited'])
+  self.assertEqual(result['coverage']['finished_queries'],3)
+  self.assertTrue(any(q['keywords']==['U3D'] for q in seen))
+
+ def test_resume_prioritizes_pending_descriptions(self):
+  from workapp.platforms import fetch_linkedin
+  r=job('linkedin','遊戲工程師','Company','Taiwan','https://www.linkedin.com/jobs/view/1234567');r['id']='linkedin:1234567'
+  seen=[]
+  def reader(url,timeout=15):
+   seen.append(url);return '<div class="show-more-less-html__markup">Unity development</div>'
+  coverage={'unverified_details':1,'cursors':[{'keyword':'Unity','location':'Taiwan','offset':10,'done':False}]}
+  result=fetch_linkedin(self.f|{'_resume':True,'_coverage':coverage,'_previous_jobs':[r]},reader,lambda _:None)
+  self.assertEqual(len(seen),1);self.assertIn('/jobPosting/',seen[0])
+  self.assertEqual(result['coverage']['round_pages'],0)
+  self.assertEqual(result['coverage']['unverified_details'],0)
+  self.assertEqual(result['coverage']['cursors'][0]['offset'],10)

@@ -139,6 +139,14 @@ async function search(newPage = 1, continueSearch = false) {
     const data = await api('/api/search', {...f,page:newPage,continue_search:continueSearch});
     page = data.page; total = data.total; displayedFilters = f;
     const failed = data.sources.filter(s=>s.error);
+    $('coverage-summary').replaceChildren(...data.sources.map(s=>{
+      const card=el('div','source'+(s.error?' error':''));
+      card.append(el('strong','',s.name),el('p','',s.state==='skipped' ? '尚未查詢' : s.error && !s.count ? '讀取未完成，無法判定職缺數量' : `已保存 ${s.count} 筆 · 符合 ${s.matched ?? data.jobs.filter(j=>j.source===s.id).length} 筆`));
+      if(s.note)card.append(el('p','small',s.note));
+      if(s.error)card.append(el('p','small','搜尋尚未完整，請查看下方來源原因。'));
+      if(s.coverage?.unverified_details)card.append(el('p','small',`${s.coverage.unverified_details} 筆內文待確認，可能還有符合職缺。`));
+      return card;
+    }));
     $('result-count').textContent = !total && failed.length ? '未完整取得' : total.toLocaleString();
     $('result-context').textContent = `${f.region === 'taiwan' ? '台灣優先' : '台灣職缺優先列出'} · 職稱符合優先 · 以下是已取得結果，非市場總數`;
     renderJobs('jobs',data.jobs);
