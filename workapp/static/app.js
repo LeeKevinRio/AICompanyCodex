@@ -122,7 +122,7 @@ function renderSources(sources) {
     const card = el('div','source' + (s.error ? ' error' : ''));
     card.append(el('strong','',s.name),el('p','',s.last_success ? `${s.count} 個職缺 · 更新 ${time(s.last_success)}` : '尚未取得自動搜尋資料'));
     if (s.note) card.append(el('p','',s.note));
-    if (s.coverage?.pages !== undefined) card.append(el('p','',`已讀 ${s.coverage.pages} 頁、${s.coverage.detail_pages || 0} 筆詳細內容 · ${s.coverage.finished_queries}/${s.coverage.queries} 組查詢到達結尾。${s.coverage.message}`));
+    if (s.coverage?.pages !== undefined) card.append(el('p','',`已讀 ${s.coverage.pages} 頁、${s.coverage.detail_pages || 0} 筆詳細內容。${s.coverage.queries!==undefined ? `${s.coverage.finished_queries}/${s.coverage.queries} 組查詢到達結尾。` : ''}${s.coverage.message}`));
     if (s.matched !== undefined) card.append(el('p','',`符合 ${s.matched} 筆；排除：${Object.entries(s.excluded || {}).map(([k,v])=>`${k} ${v}`).join('、') || '無'}（依序計算，不重複計數）`));
     if (s.error) card.append(el('p','',`讀取失敗，保留上次資料：${s.error}`));
     else if (s.state !== 'skipped') card.append(el('p','',`最快每 ${s.refresh_minutes} 分鐘更新`));

@@ -5,6 +5,32 @@ from workapp.platforms import PlatformSearch, job, parse_cards
 from workapp.service import Service
 
 class PlatformTests(unittest.TestCase):
+ def test_indeed_current_and_legacy_cards_deduplicate(self):
+  html='''<div class="job_seen_beacon"><h3 class="jobTitle"><a class="jcs-JobTitle" href="/viewjob?jk=abc&from=x"><span>Unity developer</span></a></h3><span data-testid="company-name">C</span></div><a class="tapItem" href="/viewjob?from=y&jk=abc"><h2 class="jobTitle"><span>Unity developer</span></h2><span class="companyName">C</span></a>'''
+  rows=parse_cards('indeed',html,'https://www.indeed.com')
+  self.assertEqual(len(rows),1);self.assertEqual(rows[0]['title'],'Unity developer')
+  self.assertEqual(rows[0]['url'],'https://www.indeed.com/viewjob?jk=abc')
+
+ def test_cake_cards_do_not_mix_company_or_tags(self):
+  html='''<main><article><a class="xyz_jobTitle" href="/companies/first-co/jobs/one">Engineer</a><span class="xyz_tags">Unity</span></article><article><a class="xyz_jobTitle" href="/companies/second-co/jobs/two">Artist</a><span class="xyz_companyName">Second</span></article></main>'''
+  rows=parse_cards('cake',html,'https://www.cake.me')
+  self.assertEqual(rows[0]['company'],'First Co');self.assertEqual(rows[0]['description'],'Unity')
+  self.assertEqual(rows[1]['company'],'Second');self.assertEqual(rows[1]['description'],'')
+
+ def test_browser_later_failure_keeps_first_page(self):
+  from unittest.mock import MagicMock,patch
+  from workapp.platforms import fetch_browser_platform
+  runtime=MagicMock();tab=runtime.chromium.launch.return_value.new_context.return_value.new_page.return_value
+  first=MagicMock();first.status=200
+  blocked=MagicMock();blocked.status=403
+  tab.goto.side_effect=[first,blocked];tab.title.return_value='Cake jobs'
+  tab.content.return_value='<article><a class="jobTitle" href="/companies/c/jobs/one">Unity Engineer</a></article>'
+  manager=MagicMock();manager.__enter__.return_value=runtime
+  with patch('playwright.sync_api.sync_playwright',return_value=manager),patch('workapp.platforms.time.sleep'):
+   result=fetch_browser_platform('cake',self.f)
+  self.assertEqual(len(result['jobs']),1);self.assertEqual(result['coverage']['pages'],1)
+  self.assertIn('403',result['coverage']['message']);self.assertEqual(tab.goto.call_count,2)
+
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory();self.calls=[];self.now=100000
   self.service=Service(self.tmp.name+'/db',fetcher=lambda _:[],clock=lambda:self.now)
