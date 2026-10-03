@@ -112,6 +112,7 @@ function jobCard(job) {
   bottom.append(el('span','job-salary',job.salary), el('span','job-date',job.discovered_at ? `首次發現 ${time(job.discovered_at)}` : job.published ? `發布／更新 ${time(job.published)}` : '發布日期未明列'));
   content.append(bottom);
   if (job.imported_at) content.append(el('p','small muted',`手動匯入 ${time(job.imported_at)} · 非即時資料，應徵前請確認原站`));
+  else if (job.read_at) content.append(el('p','small muted',`瀏覽器讀取 ${time(job.read_at)} · 列表摘要，完整條件請確認原站`));
   const details = el('details'); details.append(el('summary','','查看工作內容'),el('p','',job.description || '請到原始招募頁面查看完整說明。')); content.append(details);
   card.append(content); return card;
 }
@@ -215,6 +216,26 @@ $('search-form').addEventListener('input',clearTaiwanResults);
 $('search-form').addEventListener('change',clearTaiwanResults);
 $('search-taiwan').onclick=searchTaiwan;
 $('search-104').onclick=search104;
+let browser104Polling = null;
+async function pollBrowser104() {
+  try {
+    const result=await api('/api/104/browser');
+    const active=['starting','loading','reading','waiting_user'].includes(result.state);
+    $('browser104-start').disabled=active; $('browser104-resume').disabled=active; $('browser104-stop').disabled=!active;
+    if(result.state!=='idle') status('browser104-status',`${result.keyword} · 已讀 ${result.pages} 頁 · ${result.count} 筆／網站 ${result.total ?? '未知'} 筆。${result.message}`,['error','partial','waiting_user'].includes(result.state));
+    if(active) browser104Polling=setTimeout(pollBrowser104,2000);
+    else {browser104Polling=null; if(result.state!=='idle') status('browser104-status',$('browser104-status').textContent+' 按「搜尋工作」套用目前篩選。');}
+  } catch(error) {browser104Polling=null;status('browser104-status',error.message,true);$('browser104-start').disabled=false;$('browser104-resume').disabled=false;}
+}
+async function startBrowser104(resume) {
+  $('browser104-start').disabled=true; $('browser104-resume').disabled=true;
+  try {await api('/api/104/browser/start',{keyword:filters().keyword,resume}); if(browser104Polling)clearTimeout(browser104Polling);await pollBrowser104();}
+  catch(error){status('browser104-status',error.message,true);$('browser104-start').disabled=false;$('browser104-resume').disabled=false;}
+}
+$('browser104-start').onclick=()=>startBrowser104(false);
+$('browser104-resume').onclick=()=>startBrowser104(true);
+$('browser104-stop').onclick=async()=>{try{await api('/api/104/browser/stop',{});status('browser104-status','正在停止，已讀結果會保留。');}catch(error){status('browser104-status',error.message,true);}};
+pollBrowser104();
 let import104Html = '';
 function prepare104(html) {
   import104Html = html;

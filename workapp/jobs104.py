@@ -143,6 +143,8 @@ def normalize_104(row):
 
 class Search104:
     def __init__(self, db, fetcher=fetch_104, clock=time.time):
+        from .browser104 import Browser104
+        self.browser = Browser104(db)
         self.db,self.fetcher,self.clock = db,fetcher,clock
         self.lock=threading.Lock()
         with db() as conn:
@@ -166,6 +168,21 @@ class Search104:
         if not keyword: return base | {'state':'needs_keyword','message':'請輸入職稱、技能或公司，再搜尋 104。'}
         if ',' in keyword or '，' in keyword:
             return base | {'state':'needs_keyword','message':'104 每次搜尋一個關鍵字，請分別搜尋。'}
+        snapshot, updated = self.browser.saved(keyword)
+        if snapshot and (snapshot['jobs'] or snapshot['progress']['state']=='complete'):
+            updated = snapshot.get('data_at',updated)
+            with self.db() as conn:
+                imported = [json.loads(r['payload']) for r in conn.execute('SELECT payload FROM imported104')]
+            jobs = list({j['id']:j for j in [*imported,*snapshot['jobs']]}.values())
+            found = [j for j in jobs if matches(j, filters)]
+            found.sort(key=lambda j:keyword_matches(j['title'].casefold(),keyword.casefold()),reverse=True)
+            progress = snapshot['progress']
+            fresh = self.clock()-updated < 1800
+            complete = progress['state']=='complete'
+            return base | {'results':found, 'state':'ready' if complete and fresh else 'partial',
+                           'message': '' if complete and fresh else progress.get('message','') + (' 快照超過 30 分鐘，請重新讀取。' if not fresh else ''),
+                           'fetched_count':len(snapshot['jobs']), 'fetched_at':updated,'cached':True,'stale':not fresh,
+                           'imported_count':sum(bool(j.get('imported_at')) for j in jobs), 'browser_progress':progress}
         with self.lock:
             now=self.clock()
             with self.db() as conn:

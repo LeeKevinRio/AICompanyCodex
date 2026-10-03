@@ -38,6 +38,8 @@ def make_handler(service):
                     self.send_json({"jobs": service.discoveries(int(query["rule_id"]))})
                 elif parsed.path == "/api/status":
                     self.send_json({"sources": service.source_status(), "scheduler": "running"})
+                elif parsed.path == '/api/104/browser':
+                    self.send_json(service.search104.browser.status())
                 else:
                     filename = {"/": "index.html", "/app.js": "app.js", "/style.css": "style.css", "/favicon.svg": "favicon.svg"}.get(parsed.path)
                     if not filename:
@@ -78,6 +80,10 @@ def make_handler(service):
                     self.send_json(service.search104.search(validate_filters(data)))
                 elif path == '/api/import104':
                     self.send_json(service.search104.import_html(data.get('html')))
+                elif path == '/api/104/browser/start':
+                    self.send_json(service.search104.browser.start(validate_filters(data)['keyword'], data.get('resume') is True))
+                elif path == '/api/104/browser/stop':
+                    self.send_json(service.search104.browser.stop())
                 elif path == "/api/web-search":
                     self.send_json(service.web_search.search(validate_filters(data)))
                 elif path == "/api/rules":
@@ -117,6 +123,7 @@ def main():
         pass
     finally:
         service.stop.set()
+        service.search104.browser.stop()
         server.server_close()
 
 
