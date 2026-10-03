@@ -36,6 +36,16 @@
         <p id="salary-help" class="small muted">薪資門檻依職缺公開的薪資上限比較；不同幣別／週期不換算。逗號分隔的關鍵字，符合任一項即可。</p>
       </form>
       <details class="external-search"><summary>備用搜尋與接入說明</summary>
+        <section class="import104">
+          <h2>匯入已開啟的 104 職缺</h2>
+          <p>自動搜尋遇到網站驗證時，在 104 搜尋結果頁按 Ctrl+A、Ctrl+C，再貼到這裡。只收錄該頁已載入的職缺，不會自動更新。</p>
+          <label for="paste104">貼上 104 搜尋頁內容</label>
+          <textarea id="paste104" rows="3" placeholder="在這裡按 Ctrl+V，保留複製的網頁格式"></textarea>
+          <label for="file104">或選擇儲存的 HTML 搜尋頁</label>
+          <input id="file104" type="file" accept=".html,.htm,text/html">
+          <button type="button" id="import104" class="outline" disabled>匯入職缺</button>
+          <p id="import104-status" role="status" aria-live="polite"></p>
+        </section>
         <h2 id="external-title">104 職缺搜尋</h2>
         <button type="button" class="primary" id="search-104">直接搜尋 104</button>
         <p class="small muted">直接讀取前兩頁並套用目前篩選；職稱符合優先。每次一個關鍵字，快取 30 分鐘。遠端未明列不視為全遠端；主搜尋已支援按選定來源自動掃描。</p>

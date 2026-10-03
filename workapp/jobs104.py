@@ -8,6 +8,47 @@ from urllib.parse import urlencode, urlparse
 from .domain import matches, plain_text, keyword_matches
 
 
+class VerificationRequired(ValueError):
+    pass
+
+
+def parse_104_html(html):
+    """Read copied public job cards, never execute imported markup or follow links."""
+    from bs4 import BeautifulSoup
+    if not isinstance(html, str) or len(html.encode('utf-8')) > 2_000_000:
+        raise ValueError('請貼入 2 MB 以下的 104 搜尋頁內容。')
+    soup = BeautifulSoup(html, 'html.parser')
+    for node in soup.select('script,style,iframe,template'):
+        node.decompose()
+    jobs = {}
+    for card in soup.select('.info-container')[:200]:
+        title = card.select_one('.info-job a[href]')
+        company = card.select_one('.info-company__text')
+        location = card.select_one('[data-gtm-joblist^="職缺-地區-"]')
+        salary = card.select_one('[data-gtm-joblist^="職缺-薪資-"]')
+        description = card.select_one('.info-description')
+        text = lambda element: element.get_text(' ', strip=True) if element else ''
+        if not title or not text(title):
+            continue
+        row = {'jobName': text(title), 'custName': text(company),
+               'link': {'job': title.get('href', '')}, 'jobAddrNoDesc': text(location),
+               'salaryDesc': text(salary), 'description': text(description),
+               'tags': [text(n) for n in card.select('.info-othertags a')]}
+        # Parse only explicit monthly/yearly numeric amounts, not URL parameters.
+        amounts = re.search(r'(?:月薪|年薪)\s*([\d,]+)(?:\s*[~～－-]\s*([\d,]+))?', text(salary))
+        if amounts:
+            row['salaryLow'] = amounts[1].replace(',', '')
+            row['salaryHigh'] = (amounts[2] or amounts[1]).replace(',', '')
+        try:
+            job = normalize_104(row)
+        except ValueError:
+            continue
+        jobs[job['id']] = job
+    if not jobs:
+        raise ValueError('找不到可辨識的 104 職缺卡片。請在搜尋結果頁全選、複製後貼上，或選擇已儲存的 HTML 網頁。')
+    return list(jobs.values())
+
+
 def fetch_104(keyword):
     try:
         from playwright.sync_api import sync_playwright
@@ -26,6 +67,8 @@ def fetch_104(keyword):
                         tab = context.new_page()
                         response = tab.goto('https://www.104.com.tw/jobs/search/?' + urlencode({'keyword':keyword}), wait_until='domcontentloaded', timeout=45000)
                         if response is None: raise ValueError('104 搜尋頁沒有回應')
+                        if response.status == 403 and response.headers.get('cf-mitigated') == 'challenge':
+                            raise VerificationRequired('104 要求瀏覽器驗證，自動搜尋未完成；可使用下方的網頁匯入備援')
                         # Match WorkManager: an initial HTTP status is not the final page state.
                         try:
                             tab.wait_for_function("() => document.title && !document.title.includes('Just a moment')", timeout=30000)
@@ -41,6 +84,8 @@ def fetch_104(keyword):
                             last_error = ValueError(f"104 第 {page} 頁 API HTTP {result['status']}（搜尋頁 HTTP {response.status}）；等待後仍未取得資料")
                             tab.wait_for_timeout(2000)
                         if payload is not None: break
+                    except VerificationRequired:
+                        raise
                     except Exception as exc:
                         last_error = exc
                     finally:
@@ -70,7 +115,7 @@ def normalize_104(row):
     description = plain_text(row.get('description',''))
     hint = ' '.join([title,description,*tags]).lower()
     remote = 'unknown'
-    if re.search(r'部分遠端|混合辦公|hybrid',hint): remote = 'hybrid'
+    if re.search(r'部[分份]遠端|混合辦公|hybrid',hint): remote = 'hybrid'
     elif re.search(r'不(?:提供|接受|開放|可)?遠端|無法遠端|no remote|on.site only',hint): remote = 'onsite'
     elif re.search(r'全遠端|完全遠端|fully remote|100% remote',hint): remote = 'remote'
     salary = plain_text(row.get('salaryDesc') or '薪資未公開')
@@ -102,6 +147,18 @@ class Search104:
         self.lock=threading.Lock()
         with db() as conn:
             conn.execute('CREATE TABLE IF NOT EXISTS search104_cache(keyword TEXT PRIMARY KEY,payload TEXT,fetched_at REAL,attempted_at REAL,error TEXT)')
+            conn.execute('CREATE TABLE IF NOT EXISTS imported104(id TEXT PRIMARY KEY,payload TEXT NOT NULL,imported_at REAL NOT NULL)')
+
+    def import_html(self, html):
+        jobs = parse_104_html(html)
+        now = self.clock()
+        with self.lock, self.db() as conn:
+            for job in jobs:
+                job.update(imported_at=now, source_name='104 人力銀行 · 手動匯入快照')
+                conn.execute('INSERT OR REPLACE INTO imported104 VALUES(?,?,?)',
+                             (job['id'], json.dumps(job, ensure_ascii=False), now))
+            total = conn.execute('SELECT count(*) FROM imported104').fetchone()[0]
+        return {'imported': len(jobs), 'total': total, 'imported_at': now}
 
     def search(self, filters):
         keyword=filters['keyword'].strip()
@@ -125,6 +182,10 @@ class Search104:
                     error=(str(exc)[:180]+'；' if isinstance(exc,ValueError) else '')+'104 未能完成讀取（可能需要網站驗證或連線失敗）。保留前次資料；不代表沒有職缺。'
                 with self.db() as conn:
                     conn.execute('INSERT OR REPLACE INTO search104_cache VALUES(?,?,?,?,?)',(keyword.casefold(),json.dumps(jobs,ensure_ascii=False),fetched,now,error))
+            with self.db() as conn:
+                imported = [json.loads(r['payload']) for r in conn.execute('SELECT payload FROM imported104')]
+            # Automatic data wins for IDs fetched successfully; imports stay explicitly labelled.
+            jobs = list({j['id']: j for j in [*imported, *jobs]}.values())
             found=[j for j in jobs if matches(j,filters)]
             found.sort(key=lambda j:keyword_matches(j['title'].casefold(),keyword.casefold()),reverse=True)
-            return base | {'results':found,'fetched_at':fetched,'cached':not due,'stale':bool(error and fetched),'state':'error' if error else 'ready','message':error or '', 'fetched_count':len(jobs)}
+            return base | {'results':found,'fetched_at':fetched,'cached':not due,'stale':bool(error and fetched),'state':'error' if error else 'ready','message':error or '', 'fetched_count':len(jobs), 'imported_count':sum(bool(j.get('imported_at')) for j in jobs)}

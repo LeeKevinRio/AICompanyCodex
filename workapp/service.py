@@ -92,7 +92,7 @@ class Service:
         def query(source):
             if source != '104': return self.platforms.search(source,filters,resume=resume)
             data = self.search104.search(filters)
-            return data['results'], {'id':'104','name':'104 人力銀行','count':data.get('fetched_count',0),'last_success':data['fetched_at'],'error':data['message'] if data['state']!='ready' else None,'refresh_minutes':30,'note':'前兩頁；非全站職缺','state':data['state']}
+            return data['results'], {'id':'104','name':'104 人力銀行','count':data.get('fetched_count',0),'last_success':data['fetched_at'],'error':data['message'] if data['state']!='ready' else None,'refresh_minutes':30,'note':f"自動搜尋前兩頁；另有 {data.get('imported_count',0)} 筆手動匯入快照（不自動更新）；非全站職缺",'state':data['state']}
         extra = [s for s in selected if s not in SOURCES]
         with ThreadPoolExecutor(max_workers=2) as pool:
             for found,status in pool.map(query,extra):

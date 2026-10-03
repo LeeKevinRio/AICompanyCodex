@@ -109,8 +109,9 @@ function jobCard(job) {
   if (job.active === false) meta.append(el('span','pill','來源已不再列出'));
   content.append(meta);
   const bottom = el('div','job-bottom');
-  bottom.append(el('span','job-salary',job.salary), el('span','job-date',job.discovered_at ? `首次發現 ${time(job.discovered_at)}` : `發布／更新 ${time(job.published)}`));
+  bottom.append(el('span','job-salary',job.salary), el('span','job-date',job.discovered_at ? `首次發現 ${time(job.discovered_at)}` : job.published ? `發布／更新 ${time(job.published)}` : '發布日期未明列'));
   content.append(bottom);
+  if (job.imported_at) content.append(el('p','small muted',`手動匯入 ${time(job.imported_at)} · 非即時資料，應徵前請確認原站`));
   const details = el('details'); details.append(el('summary','','查看工作內容'),el('p','',job.description || '請到原始招募頁面查看完整說明。')); content.append(details);
   card.append(content); return card;
 }
@@ -118,7 +119,7 @@ function renderJobs(target, jobs) { $(target).replaceChildren(...jobs.map(jobCar
 function renderSources(sources) {
   $('sources').replaceChildren(...sources.map(s => {
     const card = el('div','source' + (s.error ? ' error' : ''));
-    card.append(el('strong','',s.name),el('p','',s.last_success ? `${s.count} 個職缺 · 更新 ${time(s.last_success)}` : '尚未取得資料'));
+    card.append(el('strong','',s.name),el('p','',s.last_success ? `${s.count} 個職缺 · 更新 ${time(s.last_success)}` : '尚未取得自動搜尋資料'));
     if (s.note) card.append(el('p','',s.note));
     if (s.coverage?.pages !== undefined) card.append(el('p','',`已讀 ${s.coverage.pages} 頁、${s.coverage.detail_pages || 0} 筆詳細內容 · ${s.coverage.finished_queries}/${s.coverage.queries} 組查詢到達結尾。${s.coverage.message}`));
     if (s.matched !== undefined) card.append(el('p','',`符合 ${s.matched} 筆；排除：${Object.entries(s.excluded || {}).map(([k,v])=>`${k} ${v}`).join('、') || '無'}（依序計算，不重複計數）`));
@@ -136,12 +137,12 @@ async function search(newPage = 1, continueSearch = false) {
   try {
     const data = await api('/api/search', {...f,page:newPage,continue_search:continueSearch});
     page = data.page; total = data.total; displayedFilters = f;
-    $('result-count').textContent = total.toLocaleString();
+    const failed = data.sources.filter(s=>s.error);
+    $('result-count').textContent = !total && failed.length ? '未完整取得' : total.toLocaleString();
     $('result-context').textContent = `${f.region === 'taiwan' ? '台灣優先' : '台灣職缺優先列出'} · 職稱符合優先 · 以下是已取得結果，非市場總數`;
     renderJobs('jobs',data.jobs);
-    if (!data.jobs.length) empty('jobs','目前沒有符合條件的職缺','試試其他關鍵字、放寬薪資條件，或改選全球職缺。資料來源的覆蓋範圍有限。');
+    if (!data.jobs.length) empty('jobs',failed.length ? '搜尋未完成，不能判定沒有職缺' : '已取得資料中沒有符合條件的職缺',failed.length ? '部分來源未能讀取。104 可使用上方「備用搜尋與接入說明」匯入已開啟的搜尋頁。' : '試試其他關鍵字、放寬薪資條件，或改選全球職缺。資料來源的覆蓋範圍有限。');
     renderSources(data.sources);
-    const failed = data.sources.filter(s=>s.error);
     status('search-status',failed.length ? '部分來源讀取失敗，以下可能包含前次資料。請查看下方來源狀態。' : '',Boolean(failed.length));
     $('pagination').hidden = total <= 30;
     $('previous').disabled = page <= 1; $('next').disabled = page * 30 >= total;
@@ -214,6 +215,34 @@ $('search-form').addEventListener('input',clearTaiwanResults);
 $('search-form').addEventListener('change',clearTaiwanResults);
 $('search-taiwan').onclick=searchTaiwan;
 $('search-104').onclick=search104;
+let import104Html = '';
+function prepare104(html) {
+  import104Html = html;
+  $('import104').disabled = !html;
+  status('import104-status', html ? '已接收網頁內容，按「匯入職缺」後儲存。' : '沒有網頁格式；請重新複製搜尋結果，或選擇 HTML 檔案。', !html);
+}
+$('paste104').addEventListener('paste', event => {
+  event.preventDefault();
+  prepare104(event.clipboardData.getData('text/html'));
+  $('paste104').value = import104Html ? '已接收網頁內容（不會執行其中的程式）' : '';
+});
+$('paste104').addEventListener('input',()=>prepare104(''));
+$('file104').addEventListener('change',async event=>{
+  prepare104('');
+  const file = event.target.files[0];
+  if (!file) return;
+  if (file.size>2000000) return status('import104-status','檔案超過 2 MB，請改用複製搜尋頁內容。',true);
+  try {prepare104(await file.text());} catch {status('import104-status','檔案讀取失敗，請重新選擇。',true);}
+});
+$('import104').onclick=async()=>{
+  $('import104').disabled=true;
+  try {
+    const result=await api('/api/import104',{html:import104Html});
+    import104Html=''; $('paste104').value=''; $('file104').value='';
+    status('import104-status',`已匯入／更新 ${result.imported} 筆，共保存 ${result.total} 筆快照。請搜尋工作套用條件；快照不會自動更新。`);
+  } catch(error) {status('import104-status',error.message,true);}
+  finally {$('import104').disabled=!import104Html;}
+};
 $('continue-search').onclick=()=>search(1,true);
 $('previous').onclick=()=>search(page-1); $('next').onclick=()=>search(page+1);
 $('reset-filters').onclick=()=>{$('search-form').reset();renderExternalSearch();clearTaiwanResults();search();};

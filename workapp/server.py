@@ -63,7 +63,8 @@ def make_handler(service):
                 return self.send_json({"error": "請從 WorkApp 網頁操作"}, 403)
             try:
                 length = int(self.headers.get("Content-Length", 0))
-                if not 0 < length <= 16384:
+                path = urlparse(self.path).path
+                if not 0 < length <= (4_000_000 if path == '/api/import104' else 16384):
                     raise ValueError("請求大小不正確")
                 data = json.loads(self.rfile.read(length))
                 if not isinstance(data, dict):
@@ -75,6 +76,8 @@ def make_handler(service):
                     self.send_json({'jobs':jobs[(page-1)*30:page*30],'total':len(jobs),'page':page,'sources':statuses})
                 elif path == "/api/search104":
                     self.send_json(service.search104.search(validate_filters(data)))
+                elif path == '/api/import104':
+                    self.send_json(service.search104.import_html(data.get('html')))
                 elif path == "/api/web-search":
                     self.send_json(service.web_search.search(validate_filters(data)))
                 elif path == "/api/rules":

@@ -44,6 +44,17 @@ class Jobs104Tests(unittest.TestCase):
   self.row['appearDate']='20260230';self.assertEqual(normalize_104(self.row)['published'],'')
 
 class BrowserFlowTests(unittest.TestCase):
+ def test_challenge_stops_without_repeated_requests(self):
+  from unittest.mock import MagicMock,patch
+  from workapp.jobs104 import fetch_104,VerificationRequired
+  runtime=MagicMock();browser=runtime.chromium.launch.return_value
+  tab=browser.new_context.return_value.new_page.return_value
+  tab.goto.return_value.status=403;tab.goto.return_value.headers={'cf-mitigated':'challenge'}
+  manager=MagicMock();manager.__enter__.return_value=runtime
+  with patch('playwright.sync_api.sync_playwright',return_value=manager):
+   with self.assertRaises(VerificationRequired):fetch_104('Unity')
+  tab.goto.assert_called_once();tab.evaluate.assert_not_called();browser.close.assert_called_once()
+
  def test_initial_403_waits_then_retries_api(self):
   from unittest.mock import MagicMock,patch
   from workapp.jobs104 import fetch_104
@@ -59,3 +70,29 @@ class BrowserFlowTests(unittest.TestCase):
   self.assertEqual(tab.wait_for_function.call_count,2)
   self.assertEqual(ctx.close.call_count,2)
   browser.close.assert_called_once()
+
+
+class Import104Tests(unittest.TestCase):
+ html='''<div class="info-container"><div class="info-job"><a href="https://www.104.com.tw/job/demo?tracking=1">Unity 工程師（部份遠端）</a></div><a class="info-company__text">測試公司</a><a data-gtm-joblist="職缺-地區-台北市">台北市</a><a data-gtm-joblist="職缺-薪資-月薪">月薪50,000~80,000元</a><div class="info-description">開發 Unity 遊戲</div></div>'''
+ def test_parse_validates_and_deduplicates(self):
+  from workapp.jobs104 import parse_104_html
+  jobs=parse_104_html(self.html*2+'<script>alert(1)</script>')
+  self.assertEqual(len(jobs),1);self.assertEqual(jobs[0]['salary_max'],80000)
+  self.assertEqual(jobs[0]['remote'],'hybrid');self.assertEqual(jobs[0]['published'],'')
+  self.assertEqual(jobs[0]['url'],'https://www.104.com.tw/job/demo')
+  for html in (None,'<h1>Just a moment</h1>',self.html.replace('www.104.com.tw','evil.example'),'x'*2000001):
+   with self.assertRaises(ValueError):parse_104_html(html)
+ def test_import_persists_filters_and_retains_automatic_failure(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   service=Service(tmp+'/db')
+   def fail(keyword):raise ValueError('網站驗證')
+   search=Search104(service.db,fail,lambda:10000)
+   self.assertEqual(search.import_html(self.html)['total'],1)
+   self.assertEqual(search.import_html(self.html)['total'],1)
+   search=Search104(service.db,fail,lambda:10001)
+   f=validate_filters({'keyword':'unity','region':'taiwan'})
+   result=search.search(f)
+   self.assertEqual(result['state'],'error');self.assertEqual(len(result['results']),1)
+   self.assertEqual(result['results'][0]['imported_at'],10000)
+   f['remote']='remote';self.assertEqual(search.search(f)['results'],[])
+   f['remote']='any';f['keyword']='Python';self.assertEqual(search.search(f)['results'],[])
