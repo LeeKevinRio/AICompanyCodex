@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "WorkApp 職缺讀取助手",
+  "version": "0.1.0",
+  "description": "將 Cake、Indeed 公開搜尋卡片送回本機 WorkApp，不讀取密碼或 Cookie。",
+  "permissions": ["scripting"],
+  "host_permissions": ["https://www.cake.me/*", "https://www.indeed.com/*", "https://tw.indeed.com/*", "http://127.0.0.1:8001/*"],
+  "background": {"service_worker": "background.js"},
+  "action": {"default_title": "開啟 WorkApp 讀取助手"}
+}

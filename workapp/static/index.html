@@ -35,6 +35,13 @@
         <div class="filter-footer"><label class="check"><input type="checkbox" id="include-unknown" name="include_unknown">仍包含薪資未公開／單位未明列的職缺</label><button type="button" class="text-button" id="reset-filters">重設條件</button></div>
         <p id="salary-help" class="small muted">薪資門檻依職缺公開的薪資上限比較；不同幣別／週期不換算。逗號分隔的關鍵字，符合任一項即可。</p>
       </form>
+      <details class="external-search"><summary>Cake／Indeed 瀏覽器助手（首次需安裝）</summary>
+        <p>一般瀏覽器讀取後，職缺會自動回到這裡。請在 Chrome／Edge 的擴充功能頁開啟開發人員模式，載入專案內的 browser-helper 資料夾，再點助手圖示。</p>
+        <button type="button" class="outline" id="helper-pair">顯示本次配對碼</button>
+        <input id="helper-token" type="text" readonly hidden aria-label="本次瀏覽器助手配對碼">
+        <p id="helper-status" role="status">尚未確認助手連線</p>
+        <p class="small muted">配對碼貼到助手並連接後，保持助手頁開啟，再按搜尋。讀取前兩頁；遇驗證須在原站完成。重啟後需重新配對。不讀取密碼或 Cookie。</p>
+      </details>
       <section class="external-search" aria-labelledby="browser104-title">
         <h2 id="browser104-title">104 瀏覽器分頁讀取（測試中）</h2>
         <p>開啟一般瀏覽器，逐頁收錄目前關鍵字的職缺。若出現網站驗證，請在該視窗完成；結果會保存到 WorkApp。</p>

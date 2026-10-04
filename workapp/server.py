@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -17,16 +18,37 @@ def make_handler(service):
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
+            origin = self.headers.get('Origin', '')
+            if re.fullmatch(r'chrome-extension://[a-p]{32}', origin):
+                self.send_header('Access-Control-Allow-Origin', origin)
+                self.send_header('Vary', 'Origin')
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
 
+        def bridge_authorized(self):
+            return self.client_address[0] in ('127.0.0.1', '::1') and service.browser_bridge.authorized(self.headers.get('Authorization', '').removeprefix('Bearer '))
+
+        def do_OPTIONS(self):
+            if not self.path.startswith('/api/browser-helper/') or not re.fullmatch(r'chrome-extension://[a-p]{32}', self.headers.get('Origin', '')):
+                return self.send_json({'error': '來源不允許'}, 403)
+            self.send_response(204)
+            self.send_header('Access-Control-Allow-Origin', self.headers['Origin'])
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST')
+            self.send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+            self.end_headers()
+
         def do_GET(self):
             parsed = urlparse(self.path)
             query = {k: v[0] for k, v in parse_qs(parsed.query).items()}
             try:
-                if parsed.path == "/api/jobs":
+                if parsed.path == '/api/browser-helper/status':
+                    self.send_json(service.browser_bridge.status())
+                elif parsed.path == '/api/browser-helper/poll':
+                    if not self.bridge_authorized(): return self.send_json({'error': '配對碼不正確'}, 403)
+                    self.send_json({'task': service.browser_bridge.poll()})
+                elif parsed.path == "/api/jobs":
                     filters = validate_filters(query)
                     statuses = service.refresh()
                     jobs = service.jobs(filters)
@@ -61,18 +83,32 @@ def make_handler(service):
         def do_POST(self):
             # Local personal app: disallow cross-origin writes and non-JSON forms.
             origin = self.headers.get("Origin")
-            if (origin and urlparse(origin).netloc != self.headers.get("Host")) or not self.headers.get("Content-Type", "").startswith("application/json"):
+            path = urlparse(self.path).path
+            bridge_result = path in ('/api/browser-helper/result', '/api/browser-helper/disconnect')
+            if bridge_result and not self.bridge_authorized():
+                return self.send_json({'error': '配對碼不正確'}, 403)
+            if (not bridge_result and origin and urlparse(origin).netloc != self.headers.get("Host")) or not self.headers.get("Content-Type", "").startswith("application/json"):
                 return self.send_json({"error": "請從 WorkApp 網頁操作"}, 403)
             try:
                 length = int(self.headers.get("Content-Length", 0))
                 path = urlparse(self.path).path
-                if not 0 < length <= (4_000_000 if path == '/api/import104' else 16384):
+                if not 0 < length <= (4_000_000 if path in ('/api/import104', '/api/browser-helper/result') else 16384):
                     raise ValueError("請求大小不正確")
                 data = json.loads(self.rfile.read(length))
                 if not isinstance(data, dict):
                     raise ValueError("請求格式不正確")
                 path = urlparse(self.path).path
-                if path == "/api/search":
+                if path == '/api/browser-helper/pair':
+                    if self.client_address[0] not in ('127.0.0.1', '::1') or not origin or urlparse(origin).hostname not in ('127.0.0.1', 'localhost'):
+                        return self.send_json({'error': '請在本機 WorkApp 網頁配對'}, 403)
+                    self.send_json({'token': service.browser_bridge.token})
+                elif path == '/api/browser-helper/result':
+                    service.browser_bridge.submit(data)
+                    self.send_json({'ok': True})
+                elif path == '/api/browser-helper/disconnect':
+                    service.browser_bridge.disconnect()
+                    self.send_json({'ok': True})
+                elif path == "/api/search":
                     jobs, statuses = service.search_all(validate_filters(data), resume=data.get('continue_search') is True)
                     page = max(1, int(data.get('page', 1)))
                     self.send_json({'jobs':jobs[(page-1)*30:page*30],'total':len(jobs),'page':page,'sources':statuses})

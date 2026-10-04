@@ -1,4 +1,11 @@
 const $ = (id) => document.getElementById(id);
+async function helperStatus(){
+  try{const data=await api('/api/browser-helper/status');$('helper-status').textContent=data.connected?'助手已連線，Cake／Indeed 搜尋將使用一般瀏覽器。':'助手未連線；背景讀取可能受到網站驗證限制。';}catch{$('helper-status').textContent='尚未連上 WorkApp';}
+}
+$('helper-pair').onclick=async()=>{
+  try{const data=await api('/api/browser-helper/pair',{});$('helper-token').value=data.token;$('helper-token').hidden=false;$('helper-token').select();}catch(error){$('helper-status').textContent=error.message;}
+};
+helperStatus();setInterval(helperStatus,10000);
 let view = 'search', page = 1, total = 0, searching = false, pendingFilters = null, displayedFilters = null;
 const remoteNames = {any:'不限模式', remote:'全遠端', hybrid:'混合辦公', onsite:'現場辦公', unknown:'模式未明列'};
 const time = (value) => value ? new Date(typeof value === 'number' ? value * 1000 : value).toLocaleString('zh-TW', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}) : '尚未執行';

@@ -12,6 +12,7 @@ from .websearch import WebSearch
 from .jobs104 import Search104
 from .platforms import PlatformSearch, filter_summary
 from .domain import keyword_matches
+from .browser_bridge import BrowserBridge
 
 
 class Service:
@@ -33,7 +34,9 @@ class Service:
                 conn.execute("INSERT OR IGNORE INTO sources(id) VALUES (?)", (key,))
         self.web_search = WebSearch(self.db)
         self.search104 = Search104(self.db)
-        self.platforms = PlatformSearch(self.db)
+        self.browser_bridge = BrowserBridge()
+        self.platforms = PlatformSearch(self.db, fetcher=self.browser_bridge.fetch,
+            cache_namespace=lambda source: 'browser-helper:' if source in ('cake', 'indeed') and self.browser_bridge.connected() else '')
 
     @contextmanager
     def db(self):

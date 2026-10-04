@@ -117,3 +117,11 @@
 - 創辦人要求每輪提問/修正均列全員進度，無工作填無；公司1.0.2從main同步，個別人設未改。
 - 本輪直接讀取Cake/Indeed公開搜尋頁：兩站HTTP403、Server cloudflare、cf-mitigated challenge；Cake標題Just a moment，Indeed標題Security Check - Indeed.com。
 - 可確認是安全驗證回應；無法僅憑403判定IP封鎖、頻率、瀏覽器特徵或特定防護規則，也不能保證登入即可解決。未繞過驗證或重複刷請求。
+
+## 2026-10-04 Cake／Indeed 瀏覽器助手與讀取修正
+- 一般 Codex 瀏覽器實際載入兩站公開列表，Cake 初始驗證頁可自行完成；本機背景 Chromium、Edge 仍失敗。修正初始 challenge 立即關閉的流程，最多等待30秒，沒有代解驗證。
+- Indeed 美國站帶 l=Taiwan 仍回美國職缺。經原站國家選單確認台灣入口 tw.indeed.com，已改台灣範圍使用該站；一般瀏覽器實際看到 Nex 台北職缺等，本機背景台灣站仍403。
+- 新版 Indeed 摘要在 job_seen_beacon 外的 cardOutline / belowJobSnippet，已修正；Cake補讀列表description和地點連結；拆除mark/b等搜尋標記再合併文字，避免opport<b>unity</b>變成Unity命中。
+- 新增 browser-helper 開發版擴充功能及本機配對佇列。只讀公開卡片，無Cookie/密碼權限；配對碼只在記憶體、重啟失效。助手連線後搜尋與排程優先使用助手，前兩頁，部分失敗保留既有資料；此路徑快取與背景讀取分開。
+- 69項Python自我測試通過，JavaScript語法與diff檢查通過；實際網頁確認助手入口及離線狀態。擴充功能尚待使用者在Chrome/Edge載入並配對，尚未完成真實端對端驗證，不能宣稱自動讀取已恢復。
+- 下一步：使用者安裝browser-helper，WorkApp顯示配對碼並於助手連接；確認台灣Unity的Cake/Indeed回傳、篩選與快取。測試服務維持8001，資料庫不提交。

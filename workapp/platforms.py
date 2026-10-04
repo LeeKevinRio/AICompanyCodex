@@ -37,6 +37,10 @@ def job(source, title, company, location, url, description='', salary='', publis
 
 def parse_cards(source, html, base):
     soup = BeautifulSoup(html,'html.parser')
+    # Search highlights can split opport<b>unity</b>; do not invent word boundaries.
+    for highlight in soup.select('mark, b, strong, em'):
+        highlight.unwrap()
+    soup.smooth()
     out = []
     def text(card, selector):
         node=card.select_one(selector)
@@ -50,10 +54,11 @@ def parse_cards(source, html, base):
             out.append(job(source,title,text(card,'h4.base-search-card__subtitle'),text(card,'.job-search-card__location'),anchor['href'].split('?')[0],salary=text(card,"[class*='salary']"),published=date['datetime'] if date else ''))
     elif source == 'indeed':
         for card in soup.select('div.job_seen_beacon, a.tapItem'):
+            card=card.find_parent(class_='cardOutline') or card
             anchor=card if card.name=='a' and card.get('href') else card.select_one('a.jcs-JobTitle, h3.jobTitle a, h2.jobTitle a, a.tapItem')
             if not anchor: continue
             title=text(card,'h3.jobTitle span, h2.jobTitle span, h2 a span') or anchor.get_text(' ',strip=True)
-            out.append(job(source,title,text(card,"[data-testid='company-name'], .companyName"),text(card,"[data-testid='text-location'], .companyLocation"),urljoin(base,anchor['href']),description=text(card,'.job-snippet'),salary=text(card,"[data-testid*='salary'], [class*='salary-snippet']")))
+            out.append(job(source,title,text(card,"[data-testid='company-name'], .companyName"),text(card,"[data-testid='text-location'], .companyLocation"),urljoin(base,anchor['href']),description=text(card,".job-snippet, [data-testid='belowJobSnippet']"),salary=text(card,"[data-testid*='salary'], [class*='salary-snippet']")))
     else:
         for anchor in soup.select("a[class*='jobTitle'][href*='/companies/'][href*='/jobs/']"):
             card=anchor;root=None
@@ -67,7 +72,9 @@ def parse_cards(source, html, base):
             if not company:
                 parts=urlparse(anchor['href']).path.split('/')
                 company=parts[parts.index('companies')+1].replace('-',' ').title()
-            out.append(job(source,anchor.get_text(' ',strip=True),company,text(card,"[class*='features']"),urljoin(base,anchor['href']).split('?')[0],description=text(card,"[class*='tags']"),salary=text(card,"[class*='salary']")))
+            location=' / '.join(dict.fromkeys(a.get_text(' ',strip=True) for a in card.select("a[href*='/in-']"))) or text(card,"[class*='features']")
+            description=' '.join(filter(None,[text(card,"[class*='description']"),text(card,"[class*='tags']")]))
+            out.append(job(source,anchor.get_text(' ',strip=True),company,location,urljoin(base,anchor['href']).split('?')[0],description=description,salary=text(card,"[class*='salary']")))
     if not out:
         # Empty shell / CAPTCHA / changed selectors must not become a false zero.
         raise ValueError('沒有取得可辨識的職缺卡片，可能無結果、頁面改版或需要驗證')
@@ -175,12 +182,33 @@ def filter_summary(jobs, filters):
     return remaining,reasons
 
 
+def wait_for_job_content(tab, response, selector, timeout=30000):
+    """Allow an interstitial to finish naturally; never click/solve verification."""
+    if response is None:
+        raise ValueError('搜尋頁沒有回應')
+    challenge = response.headers.get('cf-mitigated') == 'challenge' or bool(re.search(r'just a moment|captcha|security check|請稍候|安全驗證', tab.title(), re.I))
+    if response.status >= 400 and not challenge:
+        raise ValueError(f'搜尋頁 HTTP {response.status}')
+    try:
+        tab.wait_for_selector(selector, timeout=timeout)
+    except Exception:
+        title = tab.title()
+        if challenge or re.search(r'just a moment|captcha|verify|security check|請稍候|安全驗證', title, re.I):
+            raise ValueError('網站驗證尚未完成；已等待頁面自行載入，未取得職缺') from None
+        raise ValueError('等待職缺內容逾時，可能頁面改版或沒有結果') from None
+
+
+def platform_base(source, filters):
+    if source == 'cake': return 'https://www.cake.me'
+    return 'https://tw.indeed.com' if filters['region'] == 'taiwan' else 'https://www.indeed.com'
+
+
 def fetch_browser_platform(source, filters):
     """Port WorkManager's rendered lists and Cake detail pass, preserving partial data."""
     from playwright.sync_api import sync_playwright
     keyword=filters['keyword']
-    location=filters['location'] or ('Taiwan' if filters['region']=='taiwan' else '')
-    base='https://www.cake.me' if source=='cake' else 'https://www.indeed.com'
+    location=filters['location']
+    base=platform_base(source, filters)
     selector="a[href*='/companies/'][href*='/jobs/']" if source=='cake' else 'div.job_seen_beacon, a.tapItem'
     found={};pages=0;details=0;warning='';started=time.monotonic()
     with sync_playwright() as p:
@@ -193,10 +221,7 @@ def fetch_browser_platform(source, filters):
                 url=base+'/jobs?'+urlencode({'q':keyword,'page':index+1} if source=='cake' else {'q':keyword,'l':location,'start':index*10})
                 try:
                     response=tab.goto(url,wait_until='domcontentloaded',timeout=60000 if source=='cake' else 30000)
-                    if response is None:raise ValueError('搜尋頁沒有回應')
-                    if response.status>=400:raise ValueError(f'搜尋頁 HTTP {response.status}')
-                    if re.search(r'just a moment|captcha|verify',tab.title(),re.I):raise ValueError('來源要求網站驗證')
-                    tab.wait_for_selector(selector,timeout=25000 if source=='cake' else 8000)
+                    wait_for_job_content(tab,response,selector)
                     if source=='cake':tab.wait_for_timeout(1500)
                     rows=parse_cards(source,tab.content(),base)
                     for row in rows:found[row['id']]=row
@@ -249,8 +274,9 @@ def fetch_platform(source, filters):
 
 
 class PlatformSearch:
-    def __init__(self,db,fetcher=fetch_platform,clock=time.time):
+    def __init__(self,db,fetcher=fetch_platform,clock=time.time,cache_namespace=None):
         self.db,self.fetcher,self.clock=db,fetcher,clock
+        self.cache_namespace=cache_namespace or (lambda source:'')
         self.locks={k:threading.Lock() for k in PLATFORMS}
         with db() as conn:
             conn.execute('CREATE TABLE IF NOT EXISTS platform_cache(source TEXT, query TEXT, payload TEXT, fetched_at REAL, attempted_at REAL, error TEXT, PRIMARY KEY(source,query))')
@@ -261,6 +287,7 @@ class PlatformSearch:
         query=json.dumps({k:filters[k] for k in ('keyword','region','location')},sort_keys=True)
         if source=='remoteok': query='feed'
         elif source=='linkedin': query='v3:'+query
+        query=self.cache_namespace(source)+query
         status={'id':source,'name':PLATFORMS[source],'count':0,'last_success':None,'error':None,'refresh_minutes':360 if source=='remoteok' else 30,'note':('台灣／全球分開查詢、別名與分頁；非全站總數' if source=='linkedin' else '公開搜尋前兩頁；Cake最多補讀15筆內文；非全站職缺') if source!='remoteok' else '公開職缺 feed；地區未知不推定台灣可應徵'}
         if source!='remoteok' and not filters['keyword']:
             return [],status|{'note':'未查詢：請輸入關鍵字','state':'skipped'}

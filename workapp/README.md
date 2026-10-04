@@ -1,5 +1,7 @@
 # WorkApp 0.1
 
+Cake／Indeed 背景讀取受限時，可使用 [一般瀏覽器助手](../browser-helper/README.md)。助手需一次性安裝與本機配對；尚待安裝後真實端對端驗證。台灣 Indeed 已改用 tw.indeed.com，新版列表摘要與 Cake 列表內文已納入。
+
 台灣優先的全球職缺搜尋與持久化背景掃描。此 APP 位於 `workapp` 分支，從公司 `main` 的 `04ee2abb2da05acefc224c7d623c79af512f358b` 建立。
 
 ## 本機啟動

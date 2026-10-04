@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><title>WorkApp 職缺讀取助手</title><link rel="stylesheet" href="helper.css"><script src="helper.js" defer></script></head>
+<body><main><h1>連接 WorkApp</h1><p>貼上 WorkApp 的配對碼。保持本頁開啟，搜尋時會自動讀取 Cake、Indeed 的公開職缺卡片。</p>
+<label for="token">本次配對碼</label><input id="token" type="password" autocomplete="off"><button id="connect">連接</button><button id="disconnect" disabled>停止</button>
+<p id="status" role="status">尚未連線</p><p>只傳回公開卡片，不讀取 Cookie、密碼或私人履歷。配對碼只放在本頁記憶體，關閉頁面或重啟 WorkApp 後需重新配對。</p>
+<p>如原站要求人工驗證，請在自動開啟的原站分頁完成；助手最多等待 60 秒，不會代解驗證。每次搜尋讀前兩頁，仍可能有更多結果。</p>
+<a href="http://127.0.0.1:8001/" target="_blank" rel="noreferrer">回到 WorkApp</a><ul id="log" aria-live="polite"></ul></main></body></html>
