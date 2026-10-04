@@ -112,3 +112,8 @@
 - 對照補上Cake前兩頁、等待25秒與1500ms穩定、公司名fallback、卡片隔離、標籤及最多15筆詳細頁內容/薪資；第二頁失敗保留第一頁。Indeed前兩頁start0/10、www主站+Taiwan條件、舊a.tapItem及新版h3/jcs-JobTitle、jk去重。遇403或驗證立即停止，不反覆重試。
 - 58項測試通過；真實各跑一次Unity/台灣，Cake和Indeed皆在搜尋頁HTTP403，尚未恢復真實來源成功。不把歷史成功或解析測試誤稱今日取得資料。
 - 主程式Playwright為1.63.0，原始專案鎖1.49.1；本轮沒有降級瀏覽器或複製登入資料。來源存取限制仍待可用環境/授權資料方式。
+
+## 2026-10-04 全員回報制度與403原因確認
+- 創辦人要求每輪提問/修正均列全員進度，無工作填無；公司1.0.2從main同步，個別人設未改。
+- 本輪直接讀取Cake/Indeed公開搜尋頁：兩站HTTP403、Server cloudflare、cf-mitigated challenge；Cake標題Just a moment，Indeed標題Security Check - Indeed.com。
+- 可確認是安全驗證回應；無法僅憑403判定IP封鎖、頻率、瀏覽器特徵或特定防護規則，也不能保證登入即可解決。未繞過驗證或重複刷請求。
