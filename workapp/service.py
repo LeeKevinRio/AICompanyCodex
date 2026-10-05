@@ -132,7 +132,7 @@ class Service:
     def add_rule(self, data):
         filters = validate_filters(data.get("filters", {}))
         name = str(data.get("name", "")).strip()
-        hours = data.get("hours", 6)
+        hours = data.get("hours", 24)
         if not name or len(name) > 80 or hours not in (6, 12, 24):
             raise ValueError("請填寫名稱（最多 80 字），掃描頻率為 6、12 或 24 小時")
         with self.db() as conn:

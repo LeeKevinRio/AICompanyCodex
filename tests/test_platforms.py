@@ -5,6 +5,17 @@ from workapp.platforms import PlatformSearch, job, parse_cards
 from workapp.service import Service
 
 class PlatformTests(unittest.TestCase):
+ def test_daily_default_and_explicit_focus_frequency(self):
+  daily=self.service.add_rule({'name':'Global Unity','filters':self.f|{'region':'global'}})
+  focus=self.service.add_rule({'name':'Focus','filters':self.f,'hours':6})
+  rules={r['id']:r for r in self.service.rules()}
+  self.assertEqual(rules[daily]['hours'],24)
+  self.assertEqual(rules[focus]['hours'],6)
+  self.service.scan(daily)
+  rules={r['id']:r for r in self.service.rules()}
+  self.assertAlmostEqual(rules[daily]['next_run']-rules[daily]['last_run'],86400)
+  self.assertIsNone(self.service.scan(daily,scheduled=True))
+
  def test_global_keeps_overseas_onsite_jobs_without_taiwan_priority(self):
   local=job('linkedin','Unity engineer','C','Taiwan','https://www.linkedin.com/jobs/view/1',published='2026-09-01',remote='onsite')
   overseas=job('linkedin','Unity engineer','C','London','https://www.linkedin.com/jobs/view/2',published='2026-10-01',remote='onsite')
