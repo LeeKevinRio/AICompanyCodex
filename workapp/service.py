@@ -93,7 +93,15 @@ class Service:
             status.update(matched=len(matched),excluded=excluded)
 
         def query(source):
-            if source != '104': return self.platforms.search(source,filters,resume=resume)
+            if source != '104':
+                found, status = self.platforms.search(source,filters,resume=resume)
+                if source in ('cake','indeed'):
+                    status['helper_connected'] = self.browser_bridge.connected()
+                    if status.get('error') and not status['helper_connected']:
+                        status['action'] = '瀏覽器助手未連線；請展開上方助手設定，安裝並配對後再搜尋。'
+                    if source == 'indeed' and filters['region'] == 'global':
+                        status['note'] += '；目前 Indeed 全球模式僅接美國站，尚未涵蓋各國站。'
+                return found, status
             data = self.search104.search(filters)
             progress=data.get('browser_progress')
             note=(f"瀏覽器已讀 {progress['pages']} 頁，{progress['count']} 筆／網站 {progress.get('total') if progress.get('total') is not None else '未知'} 筆；狀態 {progress['state']}" if progress else 'API 前兩頁；可開啟瀏覽器逐頁完整讀取')
@@ -104,7 +112,7 @@ class Service:
                 jobs.extend(found);statuses.append(status)
         terms=[v.strip().casefold() for v in re.split('[,，]',filters['keyword']) if v.strip()]
         jobs=list({j['id']:j for j in jobs}.values())
-        jobs.sort(key=lambda j:(any(keyword_matches(j['title'].casefold(),t) for t in terms),j['taiwan'],j['published']),reverse=True)
+        jobs.sort(key=lambda j:(any(keyword_matches(j['title'].casefold(),t) for t in terms),j['taiwan'] if filters['region']=='taiwan' else False,j['published']),reverse=True)
         return jobs,statuses
 
     def rules(self):

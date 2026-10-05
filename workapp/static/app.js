@@ -150,12 +150,12 @@ async function search(newPage = 1, continueSearch = false) {
       const card=el('div','source'+(s.error?' error':''));
       card.append(el('strong','',s.name),el('p','',s.state==='skipped' ? '尚未查詢' : s.error && !s.count ? '讀取未完成，無法判定職缺數量' : `已保存 ${s.count} 筆 · 符合 ${s.matched ?? data.jobs.filter(j=>j.source===s.id).length} 筆`));
       if(s.note)card.append(el('p','small',s.note));
-      if(s.error)card.append(el('p','small','搜尋尚未完整，請查看下方來源原因。'));
+      if(s.error)card.append(el('p','small',s.action || s.error));
       if(s.coverage?.unverified_details)card.append(el('p','small',`${s.coverage.unverified_details} 筆內文待確認，可能還有符合職缺。`));
       return card;
     }));
     $('result-count').textContent = !total && failed.length ? '未完整取得' : total.toLocaleString();
-    $('result-context').textContent = `${f.region === 'taiwan' ? '台灣優先' : '台灣職缺優先列出'} · 職稱符合優先 · 以下是已取得結果，非市場總數`;
+    $('result-context').textContent = `${f.region === 'taiwan' ? '台灣範圍' : '全球範圍，含海外當地工作'} · 職稱符合優先 · 以下是已取得結果，非市場總數`;
     renderJobs('jobs',data.jobs);
     if (!data.jobs.length) empty('jobs',failed.length ? '搜尋未完成，不能判定沒有職缺' : '已取得資料中沒有符合條件的職缺',failed.length ? '部分來源未能讀取。104 可使用上方「備用搜尋與接入說明」匯入已開啟的搜尋頁。' : '試試其他關鍵字、放寬薪資條件，或改選全球職缺。資料來源的覆蓋範圍有限。');
     renderSources(data.sources);

@@ -5,6 +5,23 @@ from workapp.platforms import PlatformSearch, job, parse_cards
 from workapp.service import Service
 
 class PlatformTests(unittest.TestCase):
+ def test_global_keeps_overseas_onsite_jobs_without_taiwan_priority(self):
+  local=job('linkedin','Unity engineer','C','Taiwan','https://www.linkedin.com/jobs/view/1',published='2026-09-01',remote='onsite')
+  overseas=job('linkedin','Unity engineer','C','London','https://www.linkedin.com/jobs/view/2',published='2026-10-01',remote='onsite')
+  self.service.platforms.fetcher=lambda *_:[local,overseas]
+  found,_=self.service.search_all(self.f|{'region':'global'})
+  self.assertEqual([r['location'] for r in found],['London','Taiwan'])
+  found,_=self.service.search_all(self.f)
+  self.assertEqual([r['location'] for r in found],['Taiwan'])
+
+ def test_failed_source_reports_disconnected_helper_and_coverage(self):
+  def fail(*_):raise ValueError('HTTP 403')
+  self.service.platforms.fetcher=fail
+  _,statuses=self.service.search_all(self.f|{'sources':['indeed'],'region':'global'})
+  self.assertFalse(statuses[0]['helper_connected'])
+  self.assertIn('未連線',statuses[0]['action'])
+  self.assertIn('僅接美國站',statuses[0]['note'])
+
  def test_indeed_current_and_legacy_cards_deduplicate(self):
   html='''<div class="job_seen_beacon"><h3 class="jobTitle"><a class="jcs-JobTitle" href="/viewjob?jk=abc&from=x"><span>Unity developer</span></a></h3><span data-testid="company-name">C</span></div><a class="tapItem" href="/viewjob?from=y&jk=abc"><h2 class="jobTitle"><span>Unity developer</span></h2><span class="companyName">C</span></a>'''
   rows=parse_cards('indeed',html,'https://www.indeed.com')
