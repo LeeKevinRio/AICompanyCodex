@@ -18,7 +18,7 @@ async function api(path, body) {
   return data;
 }
 function filters() {
-  return {sources:Array.from(document.querySelectorAll('[name="job-source"]:checked')).map(n=>n.value),keyword:$('keyword').value.trim(),region:$('region').value,remote:$('remote').value,location:$('location').value.trim(),salary_min:Number($('salary-min').value || 0),salary_unit:$('salary-unit').value,include_unknown:$('include-unknown').checked};
+  return {sources:Array.from($('search-form').querySelectorAll('[name="job-source"]:checked')).map(n=>n.value),keyword:$('keyword').value.trim(),region:$('region').value,remote:$('remote').value,location:$('location').value.trim(),salary_min:Number($('salary-min').value || 0),salary_unit:$('salary-unit').value,include_unknown:$('include-unknown').checked};
 }
 function describe(f) {
   const parts = [f.keyword || '所有關鍵字', f.region === 'taiwan' ? '台灣可應徵' : '全球', remoteNames[f.remote]];
@@ -215,12 +215,32 @@ async function loadRules() {
   try {
     const data=await api('/api/rules'); $('rule-count').textContent=data.rules.length;
     $('rules').replaceChildren(...data.rules.map(ruleCard));
-    if (!data.rules.length) empty('rules','你的雷達，還沒有設定條件','先搜尋工作，再點選「儲存為自動掃描」。');
+    if (!data.rules.length) empty('rules','你的雷達，還沒有設定條件','點「新增條件」，直接設定想追蹤的職缺與範圍。');
   } catch(error) {status('monitor-status',error.message,true);}
 }
-function openSave() {
-  if (!$('search-form').reportValidity()) return;
-  pendingFilters=filters(); $('save-summary').textContent=describe(pendingFilters);
+function ruleFilters() {
+  const root=$('rule-conditions'), field=id=>root.querySelector('#rule-filter-'+id);
+  return {sources:Array.from(root.querySelectorAll('[name="job-source"]:checked')).map(n=>n.value),keyword:field('keyword').value.trim(),region:field('region').value,remote:field('remote').value,location:field('location').value.trim(),salary_min:Number(field('salary-min').value||0),salary_unit:field('salary-unit').value,include_unknown:field('include-unknown').checked};
+}
+function openSave(fromSearch = true) {
+  if (fromSearch && !$('search-form').reportValidity()) return;
+  const source=$('search-form'), root=$('rule-conditions');root.replaceChildren();
+  for(const selector of ['.keyword-label','.filters','.source-picker','.filter-footer .check']) {
+    const original=source.querySelector(selector), copy=original.cloneNode(true);
+    const originals=original.matches('input,select')?[original]:Array.from(original.querySelectorAll('input,select'));
+    copy.querySelectorAll('input,select').forEach((node,i)=>{
+      node.value=fromSearch?originals[i].value:(node.tagName==='SELECT'?node.options[0].value:node.type==='checkbox'?node.value:'');
+      if(node.type==='checkbox')node.checked=fromSearch?originals[i].checked:node.defaultChecked;
+    });
+    if(copy.hasAttribute('for'))copy.setAttribute('for','rule-filter-'+copy.getAttribute('for'));
+    copy.querySelectorAll('label[for]').forEach(node=>node.setAttribute('for','rule-filter-'+node.getAttribute('for')));
+    copy.querySelectorAll('[id]').forEach(node=>node.id='rule-filter-'+node.id);
+    copy.querySelectorAll('[aria-describedby]').forEach(node=>node.removeAttribute('aria-describedby'));
+    root.append(copy);
+  }
+  pendingFilters=ruleFilters(); $('save-summary').textContent=describe(pendingFilters);
+  root.oninput=()=>{$('save-summary').textContent=describe(ruleFilters());};
+  $('rule-hours').value='24';
   $('rule-name').value=pendingFilters.keyword ? `${pendingFilters.keyword} · ${pendingFilters.region==='taiwan'?'台灣':'全球'}`.slice(0,80) : '';
   status('save-error'); $('save-dialog').showModal(); $('rule-name').focus();
 }
@@ -282,13 +302,15 @@ $('import104').onclick=async()=>{
 $('continue-search').onclick=()=>search(1,true);
 $('previous').onclick=()=>search(page-1); $('next').onclick=()=>search(page+1);
 $('reset-filters').onclick=()=>{$('search-form').reset();renderExternalSearch();clearTaiwanResults();search();};
-$('open-save').onclick=openSave; $('cancel-save').onclick=()=>$('save-dialog').close();
-$('new-rule').onclick=()=>{setView('search');$('keyword').focus();};
+$('open-save').onclick=()=>openSave(true); $('cancel-save').onclick=()=>$('save-dialog').close();
+$('new-rule').onclick=()=>openSave(false);
 $('close-discoveries').onclick=()=>{$('discoveries-section').hidden=true;};
 document.querySelectorAll('[data-view]').forEach(button=>button.onclick=()=>setView(button.dataset.view));
 $('save-form').addEventListener('submit',async event=>{
   event.preventDefault(); $('save-button').disabled=true; status('save-error');
   try {
+    pendingFilters=ruleFilters();
+    if(!pendingFilters.sources.length)throw new Error('請至少選擇一個職缺來源。');
     await api('/api/rules',{name:$('rule-name').value.trim(),hours:Number($('rule-hours').value),filters:pendingFilters});
     $('save-dialog').close(); setView('monitor'); status('monitor-status','條件已儲存，後端會在 30 秒內執行首次掃描。');
   } catch(error) {status('save-error',error.message,true);} finally {$('save-button').disabled=false;}
