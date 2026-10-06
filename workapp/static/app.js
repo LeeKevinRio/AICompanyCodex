@@ -12,7 +12,12 @@ const time = (value) => value ? new Date(typeof value === 'number' ? value * 100
 function el(tag, cls, text) { const node = document.createElement(tag); if (cls) node.className = cls; if (text !== undefined) node.textContent = text; return node; }
 function status(id, message = '', error = false) { $(id).textContent = message; $(id).className = 'status' + (error ? ' error' : ''); }
 async function api(path, body) {
-  const response = await fetch(path, body === undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  let response;
+  try {
+    response = await fetch(path, body === undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  } catch {
+    throw new Error('無法連上 WorkApp 服務，請確認服務已啟動、連線正常後再試。');
+  }
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || '操作未完成，請稍後再試');
   return data;
