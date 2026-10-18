@@ -1,0 +1,8 @@
+const test=require('node:test'),assert=require('node:assert/strict');const {aggregate}=require('../integrity.js');
+test('舊日多數不能覆蓋最新日，跨市場同日才平均',()=>{const r=aggregate([{id:'a',date:'2026-10-15',change:5},{id:'b',date:'2026-10-16',change:-6},{id:'c',date:'2026-10-16',change:-8}],'2026-10-16');assert.equal(r.change,-7);assert.equal(r.rows.length,2)});
+test('與個股日期或同日數字衝突即停止平均',()=>{const row={id:'a',date:'2026-10-15',change:2};assert.equal(aggregate([row],'2026-10-16').change,null);const q={id:'a',status:'last_trade',quotedAt:'2026-10-15T13:30:00+08:00',change:-6};assert.equal(aggregate([row],'2026-10-15',[q]).change,null);assert.equal(aggregate([row],'2026-10-15',[{...q,quotedAt:'2026-10-16T13:30:00+08:00'}]).change,null)});
+test('異常與重複成分暫停；盤中與前收不同標示',()=>{const q={id:'a',date:'2026-10-16',change:40};assert.equal(aggregate([q],q.date).change,null);q.change=2;assert.equal(aggregate([q,q],q.date).change,null);assert.equal(aggregate([{...q,phase:'盤中快照'}],q.date).phase,'盤中快照');assert.equal(aggregate([{...q,phase:'前收參考'}],q.date).phase,'前收參考')});
+
+test('未來或無效日期不產生行情平均',()=>{for(const date of ['2099-01-01','2026-02-30'])assert.equal(aggregate([{id:'a',date,change:2}],null,[],'2026-10-17').change,null)});
+
+test('完整日線不能落後已收盤報價，盤中則可用昨日完成日線',()=>{const {alignAnalysis}=require('../integrity.js'),a={asOf:'2026-10-15',planEnabled:true,forecasts:[1],alerts:[]},q={quotedAt:'2026-10-16T13:30:00+08:00',status:'last_trade'};assert.equal(alignAnalysis(a,q).planEnabled,false);assert.deepEqual(alignAnalysis(a,q).forecasts,[]);assert.equal(alignAnalysis(a,{...q,status:'active'}),a);assert.equal(a.planEnabled,true)});
