@@ -40,13 +40,30 @@ def merge_action_snapshot(old,new,failed,stamp):
             result['historyFrom']=old.get('historyFrom');result['historyTo']=old.get('historyTo')
     return result
 
+def parse_reference_table(payload,source,kind):
+    if not isinstance(payload,dict) or payload.get('stat')!='OK':
+        raise ValueError('Invalid official reference response')
+    fields=payload.get('fields',[])
+    expected=['恢復買賣日期','ETF代號' if kind=='ETF分割／反分割' else '股票代號']
+    if fields[:2]!=expected:raise ValueError('Reference schema changed')
+    offset=4 if kind=='ETF分割／反分割' else 3
+    if fields[offset:offset+2]!=['停止買賣前收盤價格','恢復買賣參考價']:raise ValueError('Reference prices schema changed')
+    events=[]
+    for row in payload.get('data',[]):
+        if not isinstance(row,list) or len(row)<=offset+1:raise ValueError('Invalid reference row')
+        day=iso_date(row[0]);previous=numeric(row[offset]);reference=numeric(row[offset+1])
+        if not day or not previous or not reference:raise ValueError('Missing official reference')
+        events.append(dict(id=row[1],date=day,exchange='tse',kind=kind,previousClose=previous,referencePrice=reference,source=source,manualReview=kind=='減資恢復交易'))
+    return events
+
 def refresh():
     now=datetime.now(TZ);start=(now.date()-timedelta(days=400)).replace(day=1);today=now.date();stamp=now.isoformat()
     historic=f'https://www.twse.com.tw/rwd/zh/exRight/TWT49U?startDate={start:%Y%m%d}&endDate={today:%Y%m%d}&response=json'
     upcoming='https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL'
     otc='https://www.tpex.org.tw/openapi/v1/tpex_exright_daily'
     otc_next='https://www.tpex.org.tw/openapi/v1/tpex_exright_prepost'
-    urls=[SOURCE,historic,upcoming,otc,otc_next];data={};errors=[]
+    references={f'https://www.twse.com.tw/rwd/zh/{path}?startDate={start:%Y%m%d}&endDate={today:%Y%m%d}&response=json':kind for path,kind in [('split/TWTCAU','ETF分割／反分割'),('change/TWTB8U','變更面額'),('reducation/TWTAUU','減資恢復交易')]}
+    urls=[SOURCE,historic,upcoming,otc,otc_next,*references];data={};errors=[]
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
         futures={pool.submit(fetch,u):u for u in urls}
         for f,u in futures.items():
@@ -65,7 +82,10 @@ def refresh():
     def add(e):
         if not e['date'] or not e['id']:return
         key=(e['exchange'],e['id'],e['date'])
-        if key not in events or e.get('referencePrice'):events[key]=e
+        previous=events.get(key)
+        if previous and previous.get('kind')!=e.get('kind') and previous.get('referencePrice') and e.get('referencePrice'):
+            events[key]={**e,'manualReview':True,'kind':previous['kind']+'／'+e['kind']}
+        elif key not in events or e.get('referencePrice'):events[key]=e
     h=data.get(historic,{})
     if not isinstance(h,dict):h={}
     if h.get('stat')=='OK':
@@ -76,6 +96,12 @@ def refresh():
     for r in data.get(upcoming,[]):add(dict(id=r.get('Code'),date=iso_date(r.get('Date')),exchange='tse',kind=r.get('Exdividend','除權息'),cashDividend=numeric(r.get('CashDividend')),source=upcoming))
     for r in data.get(otc,[]):add(dict(id=r.get('SecuritiesCompanyCode'),date=iso_date(r.get('Date')),exchange='otc',kind=r.get('ExRightsDiviend','除權息'),previousClose=numeric(r.get('ClosePriceBeforeExRightsDiviend')),referencePrice=numeric(r.get('ExRightsDiviendQuote')),source=otc))
     for r in data.get(otc_next,[]):add(dict(id=r.get('SecuritiesCompanyCode'),date=iso_date(r.get('ExRrightsExDividendDate')),exchange='otc',kind=r.get('ExRrightsExDividend','除權息'),source=otc_next))
+    for url,kind in references.items():
+        if url not in data:continue
+        try:
+            parsed=parse_reference_table(data[url],url,kind)
+            for event in parsed:add(event)
+        except (ValueError,TypeError,KeyError):errors.append(url);data.pop(url,None)
     action_file=Path(__file__).with_name('corporate-actions.json')
     try:old=json.loads(action_file.read_text(encoding='utf-8'))
     except (OSError,ValueError):old={}

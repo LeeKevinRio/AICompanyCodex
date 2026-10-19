@@ -16,10 +16,11 @@ def adjust(bars,events):
     unique={}
     for e in events:
         if not bars[0]['date']<e['date']<=bars[-1]['date']:continue
+        if e.get('manualReview'):unresolved.append(e);continue
         previous=e.get('previousClose');reference=e.get('referencePrice')
         if not isinstance(previous,(int,float)) or not isinstance(reference,(int,float)) or previous<=0 or reference<=0:unresolved.append(e);continue
         ratio=reference/previous
-        if not math.isfinite(ratio) or not 0<ratio<5:unresolved.append(e);continue
+        if not math.isfinite(ratio) or not 0<ratio<(1000 if e.get('kind') in ['ETF分割／反分割','變更面額'] else 5):unresolved.append(e);continue
         if e['date'] in unique and abs(unique[e['date']]['factor']-ratio)>1e-7:unresolved.append(e);continue
         unique[e['date']]={**e,'factor':ratio}
     if unresolved:return result,[],unresolved
@@ -36,4 +37,4 @@ def adjust(bars,events):
 
 def for_stock(sid,exchange):
     d=snapshot();events=[e for e in d.get('events',[]) if e['id']==sid and e['exchange']==exchange]
-    return events,dict(fetchedAt=d.get('fetchedAt'),sources=d.get('sources',[]),errors=d.get('errors',[]),historyFrom=d.get('historyFrom'),historyTo=d.get('historyTo'),coverage='上市除權息歷史；上櫃僅近期快照；未含完整拆股及減資')
+    return events,dict(fetchedAt=d.get('fetchedAt'),sources=d.get('sources',[]),errors=d.get('errors',[]),historyFrom=d.get('historyFrom'),historyTo=d.get('historyTo'),coverage='上市除權息、ETF分割及面額變更歷史；減資僅標記待核對；上櫃僅近期快照')

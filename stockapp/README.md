@@ -59,3 +59,6 @@
 個股頁折疊「部位預算設定」可分股保存風險預算、共用單次試算現金與自填費用滑價緩衝。新鍵clearsignal-position-settings-v1，舊共用預算仍保留回退；不能當實際稅費結算／現金預占／自動交易。最近40檔分析改用IndexedDB，保存成功才清理舊公共分析快取；庫存鍵不變。
 
 預測按年度排程顯示預計3／5交易日，缺指定日線不跳過；跨公司行動標待還原核對。v1與部分還原v2分開保存，不混合宣稱勝率。全測試Node49＋Python22通過，詳見project/acceptance/round-014.md。
+
+## 2026-10-19 公司行動擴充
+新增TWSE官方 /rwd/zh/split/TWTCAU、/change/TWTB8U、/reducation/TWTAUU，使用startDate／endDate。分割及面額變更以官方前收與參考價作部分價格還原；減資僅標待核對並停用區間情境。模型／pipeline v3，保留原始OHLC與成交量。仍缺上櫃完整歷史及臨時休市，不是完整總報酬。80項測試通過，見round-020。

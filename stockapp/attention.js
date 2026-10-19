@@ -8,7 +8,7 @@
    if(!a)add(h.id,1,name,'尚未取得分析資料');
    else {
     const quoteDate=s?.quotedAt?.slice(0,10);
-    if(a.pipelineVersion!=='calendar-actions-v2'||!Number.isFinite(a.loadedAt)||a.loadedAt>now||now-a.loadedAt>=1800000)add(h.id,1,name,'分析已過期或版本更新，需重新取得');
+    if(a.pipelineVersion!=='calendar-actions-v3'||!Number.isFinite(a.loadedAt)||a.loadedAt>now||now-a.loadedAt>=1800000)add(h.id,1,name,'分析已過期或版本更新，需重新取得');
     else if(quoteDate&&['last_trade','previous_close'].includes(s.status)&&a.asOf<quoteDate)add(h.id,0,name,'分析日線落後收盤行情，情境與價位暫停');
     else if(!a.planEnabled)add(h.id,1,name,'分析條件未通過，請查看個股限制與來源說明');
     const dates=new Set(a.nextSessions||[]);

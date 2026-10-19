@@ -186,15 +186,16 @@ def analyze(sid,exchange):
     forward=next_sessions(base_day,5,load_calendar())
     upcoming=[e for e in events if e['date'] in (forward or [])]
     alerts=[];last_break=-1
+    matched_dates={e['date'] for e in applied}
     for i in range(1,len(adjusted_bars)):
         gap=(datetime.fromisoformat(adjusted_bars[i]['date'])-datetime.fromisoformat(adjusted_bars[i-1]['date'])).days
-        if abs(adjusted_bars[i]['close']/adjusted_bars[i-1]['close']-1)>.3 or '**' in adjusted_bars[i].get('note','') or gap>20:last_break=i
+        if abs(adjusted_bars[i]['close']/adjusted_bars[i-1]['close']-1)>.3 or ('**' in adjusted_bars[i].get('note','') and adjusted_bars[i]['date'] not in matched_dates) or gap>20:last_break=i
     clean=adjusted_bars[last_break:] if last_break>=0 else adjusted_bars
     if last_break>=0:alerts.append('偵測到價格跳變／還原疑慮或超過20日資料缺口；指標與回顧只使用最近斷點之後資料。')
     if failed:alerts.append(f'{failed} 個月日線來源未完成，樣本可能不連續。')
-    alerts.append('部分除權息因子已還原，非完整公司行動還原；成交量保留原始股數。' if applied else '日線仍為原始價格或未取得可用還原因子，非完整還原股價。')
-    if unresolved:alerts.append('除權息因子缺漏或基準不一致，暫停情境及價位。')
-    if upcoming:alerts.append('未來5交易日有已公告除權息，暫停跨事件價格情境及價位，請先核對事件。')
+    alerts.append('部分官方價格因子已還原，非完整公司行動還原；成交量保留原始股數。' if applied else '日線仍為原始價格或未取得可用還原因子，非完整還原股價。')
+    if unresolved:alerts.append('公司行動因子缺漏、需人工核對或基準不一致，暫停情境及價位。')
+    if upcoming:alerts.append('未來5交易日有已收錄公司行動，暫停跨事件價格情境及價位，請先核對事件。')
     if not action_meta.get('fetchedAt'):alerts.append('公司行動資料尚未取得，不代表沒有事件。')
     if forward is None:alerts.append('未來交易日曆涵蓋不足，日期仍待核對。')
     tech=indicators(clean)
@@ -212,6 +213,6 @@ def analyze(sid,exchange):
     if any(a['riskFlag'] for a in fund['announcements']):
         alerts.append('官方快照包含交易制度風險關鍵字，先核對公告；暫停價位計畫。')
         can_predict=False
-    result=dict(pipelineVersion='calendar-actions-v2',id=sid,exchange=exchange,bars=bars[-120:],historyCount=len(clean),technical=tech,fundamental=fund,forecasts=forecast(clean,tech) if can_predict else [],alerts=alerts,planEnabled=can_predict,historySources=sources,asOf=bars[-1]['date'],fetchedAt=datetime.now(TZ).isoformat(),model='透明規則 v2（部分除權息還原）；尚未經前瞻驗證' if applied else '透明規則 v1；尚未經前瞻驗證',adjusted=False,adjustment=dict(applied=bool(applied),events=applied,unresolved=unresolved,coverage=action_meta['coverage']),adjustedBars=adjusted_bars[-120:],corporateActions=events,actionMetadata=action_meta,nextSessions=forward)
+    result=dict(pipelineVersion='calendar-actions-v3',id=sid,exchange=exchange,bars=bars[-120:],historyCount=len(clean),technical=tech,fundamental=fund,forecasts=forecast(clean,tech) if can_predict else [],alerts=alerts,planEnabled=can_predict,historySources=sources,asOf=bars[-1]['date'],fetchedAt=datetime.now(TZ).isoformat(),model='透明規則 v3（部分公司行動還原）；尚未經前瞻驗證' if applied else '透明規則 v1；尚未經前瞻驗證',adjusted=False,adjustment=dict(applied=bool(applied),events=applied,unresolved=unresolved,coverage=action_meta['coverage']),adjustedBars=adjusted_bars[-120:],corporateActions=events,actionMetadata=action_meta,nextSessions=forward)
     with RESULT_LOCK:RESULT_CACHE[key]=(time.monotonic(),result)
     return result
