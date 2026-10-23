@@ -17,6 +17,11 @@
 .table-quote-note {margin:10px 0 14px;}
 .quote-meta {min-width:155px;}
 
+.journal-records>label{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:18px 0;}
+#journal-filter{color-scheme:dark;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:10px 36px 10px 14px;min-width:170px;max-width:100%;}
+#journal-filter:hover{border-color:var(--mint);}
+#journal-filter option{background:var(--panel);color:var(--text);}
+
 .overview-focus .hero{margin-bottom:20px;padding:24px 28px;min-height:0;gap:24px;}
 .overview-focus .hero h2{font-size:24px;line-height:1.5;margin:10px 0;}
 .overview-focus .hero p{max-width:520px;font-size:12px;}
