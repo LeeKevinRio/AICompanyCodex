@@ -21,5 +21,18 @@
   return {status:'已到期',return:value,realized:bias,hit:bias===record.bias,endDate:window.at(-1).date};
  }
  function validRecord(r){if(!r||typeof r.key!=='string'||![3,5].includes(r.days)||!['偏多','偏空','震盪'].includes(r.bias)||!/^\d{4}-\d{2}-\d{2}$/.test(r.asOf)||!Number.isFinite(Date.parse(r.recordedAt))||typeof r.model!=='string')return false;if(r.kind==='stock')return /^[0-9]{4,6}[A-Z]?$/.test(r.id)&&typeof r.id==='string'&&['tse','otc'].includes(r.exchange)&&Number.isFinite(r.baseClose)&&r.baseClose>0;if(r.kind==='sector')return typeof r.id==='string'&&Array.isArray(r.members)&&r.members.length>0&&r.members.length<=12&&r.members.every(m=>m.kind==='stock'&&validRecord(m))&&new Set(r.members.map(m=>m.id)).size===r.members.length;return false}
- root.PredictionModel={capture,evaluate,validRecord};if(typeof module!=='undefined')module.exports=root.PredictionModel;
+ function statistics(evaluated){
+  const groups=new Map();
+  for(const {r,outcome:o} of evaluated){
+   const key=JSON.stringify([r.kind,r.days,r.model]);
+   if(!groups.has(key))groups.set(key,{kind:r.kind,days:r.days,model:r.model,total:0,done:0,hits:0,upHits:0,downHits:0,flatHits:0,pending:0,excluded:0,returns:[]});
+   const g=groups.get(key);g.total++;
+   if(o.status==='已到期'&&Number.isFinite(o.return)&&['偏多','偏空','震盪'].includes(o.realized)&&typeof o.hit==='boolean'){
+    g.done++;g.hits+=o.hit?1:0;g.upHits+=o.realized==='偏多'?1:0;g.downHits+=o.realized==='偏空'?1:0;g.flatHits+=o.realized==='震盪'?1:0;g.returns.push(o.return);
+   }else if(/^等待|^待取得|^交易日曆待取得/.test(o.status))g.pending++;
+   else g.excluded++;
+  }
+  return [...groups.values()].map(g=>({...g,misses:g.done-g.hits,hitRate:g.done?g.hits/g.done*100:null,alwaysUpRate:g.done?g.upHits/g.done*100:null,alwaysDownRate:g.done?g.downHits/g.done*100:null,constantRate:g.done?Math.max(g.upHits,g.downHits,g.flatHits)/g.done*100:null}));
+ }
+ root.PredictionModel={capture,evaluate,validRecord,statistics};if(typeof module!=='undefined')module.exports=root.PredictionModel;
 })(typeof globalThis!=='undefined'?globalThis:this);
