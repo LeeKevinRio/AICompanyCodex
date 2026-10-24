@@ -73,11 +73,13 @@ def normalize(row,now=None,calendar=None):
         if stamp.date()==previous_day and stamp.strftime('%H:%M')>='13:30':status='previous_close'
     if calendar is not None and session is None:status='calendar_unknown'
     if calendar is not None and price and stamp and is_session(stamp.date(),calendar) is False:status='calendar_conflict'
+    valuation_eligible=bool(status=='stale' and session is False and stamp and price and 0<(now.date()-stamp.date()).days<=7 and stamp.strftime('%H:%M')>='13:30' and calendar is not None and is_session(stamp.date(),calendar) is True)
+    expected_day=previous_session(now.date(),calendar) if calendar else None
     try:
         volume=float(row.get('v',''))*1000
         if not math.isfinite(volume) or volume<0:volume=None
     except (ValueError,TypeError):volume=None
-    return dict(volumeShares=volume,id=row.get('c'),name=row.get('n') or row.get('c'),exchange=row.get('ex'),price=price,previous=previous,change=(price/previous-1)*100 if price and previous else None,open=number(row.get('o')),high=number(row.get('h')),low=number(row.get('l')),quotedAt=stamp.isoformat() if stamp else None,status=status)
+    return dict(valuationEligible=valuation_eligible,expectedQuoteDate=expected_day.isoformat() if expected_day else None,volumeShares=volume,id=row.get('c'),name=row.get('n') or row.get('c'),exchange=row.get('ex'),price=price,previous=previous,change=(price/previous-1)*100 if price and previous else None,open=number(row.get('o')),high=number(row.get('h')),low=number(row.get('l')),quotedAt=stamp.isoformat() if stamp else None,status=status)
 def fetch_quotes(ids):
     key=tuple(sorted(ids))
     with LOCK:

@@ -4,7 +4,8 @@
   const total=holdings.reduce((n,h)=>n+h.cost*h.shares,0);
   for(const h of holdings){
    const s=stocks.find(s=>s.id===h.id),a=analyses.get(h.id),name=s?.name||h.id;
-   if(!s||!Number.isFinite(s.price)||s.price<=0||!['active','last_trade','previous_close'].includes(s.status))add(h.id,0,name,'行情尚未有效，損益與交易價位需待核對');
+   if(s?.status==='stale'&&s.valuationEligible)add(h.id,1,name,`行情來源停在 ${s.quotedAt?.slice(0,10)||'較早日期'}；僅顯示歷史參考損益，交易價位待新行情`);
+   else if(!s||!Number.isFinite(s.price)||s.price<=0||!['active','last_trade','previous_close'].includes(s.status))add(h.id,0,name,'行情尚未有效，損益與交易價位需待核對');
    if(!a)add(h.id,1,name,'尚未取得分析資料');
    else {
     const quoteDate=s?.quotedAt?.slice(0,10);
