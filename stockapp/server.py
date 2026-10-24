@@ -123,7 +123,7 @@ class Handler(SimpleHTTPRequestHandler):
             except (TypeError,ValueError,KeyError):pass
             if stale and time.monotonic()-MARKET_LAST_ATTEMPT>300:
                 MARKET_LAST_ATTEMPT=time.monotonic();threading.Thread(target=update_market_background,daemon=True).start()
-            ctx['updating']=MARKET_UPDATE_LOCK.locked();ctx['lastUpdateError']=MARKET_LAST_ERROR;ctx['actions']={k:actions.get(k) for k in ['fetchedAt','historyFrom','historyTo','sources','errors']};ctx['update']=update
+            ctx['updating']=MARKET_UPDATE_LOCK.locked();ctx['lastUpdateError']=MARKET_LAST_ERROR;ctx['actions']={k:actions.get(k) for k in ['fetchedAt','historyFrom','historyTo','sources','errors','sourceStatus','lastAttemptAt']};ctx['update']=update
             return self.respond(200,ctx)
         if parsed.path=='/api/market-snapshot':
             try:return self.respond(200,fetch_market_snapshot())

@@ -23,6 +23,16 @@ def write_json(path,value):
 def source_key(url):
     return url.split('?')[0]
 
+def source_health(old,urls,failed,stamp,events):
+    failed_keys={source_key(u) for u in failed}
+    previous={s['id']:s for s in old.get('sourceStatus',[]) if isinstance(s,dict) and s.get('id')}
+    result=[]
+    for url in urls:
+        key=source_key(url);prior=previous.get(key,{})
+        ok=key not in failed_keys
+        result.append(dict(id=key,url=url,status='ok' if ok else 'error',lastAttemptAt=stamp,lastSuccessAt=stamp if ok else prior.get('lastSuccessAt'),eventCount=sum(source_key(e.get('source',''))==key for e in events) if url!=SOURCE else None,retained=not ok and any(source_key(e.get('source',''))==key for e in events)))
+    return result
+
 def merge_action_snapshot(old,new,failed,stamp):
     """Retain only failed source families; a successful empty result removes old events."""
     failed_keys={source_key(u) for u in failed}
@@ -105,10 +115,12 @@ def refresh():
     action_file=Path(__file__).with_name('corporate-actions.json')
     try:old=json.loads(action_file.read_text(encoding='utf-8'))
     except (OSError,ValueError):old={}
+    out={}
     if events or old or any(u in data for u in [historic,upcoming,otc,otc_next]):
         out=dict(version=1,fetchedAt=stamp,historyFrom=start.isoformat() if historic not in errors else None,historyTo=today.isoformat() if historic not in errors else None,events=list(events.values()),sources=list(data),errors=errors)
         out=merge_action_snapshot(old,out,[u for u in errors if u!=SOURCE],stamp)
+        out['sourceStatus']=source_health(old,urls,errors,stamp,out['events'])
         write_json(action_file,out)
-    return dict(fetchedAt=stamp,eventCount=len(events),errors=errors,calendarUpdated=SOURCE in data)
+    return dict(fetchedAt=stamp,eventCount=len(out.get('events',[])),errors=errors,calendarUpdated=SOURCE in data)
 
 if __name__=='__main__':print(json.dumps(refresh(),ensure_ascii=False))
