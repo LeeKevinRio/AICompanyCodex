@@ -50,3 +50,5 @@
 .account-quantity{max-width:140px;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:10px;border-radius:8px;}
 
 .accuracy-metrics>div{min-width:0}.accuracy-metrics strong{overflow-wrap:anywhere;}@media(max-width:760px){.risk-budget input{min-width:0;max-width:100%;}.account-quantity{max-width:110px;}}
+
+.replay-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;}.replay-grid>section{min-width:0;}.replay-grid .accuracy-metrics strong{font-size:23px;}@media(max-width:1000px){.replay-grid{grid-template-columns:1fr;}}

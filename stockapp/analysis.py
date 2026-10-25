@@ -9,10 +9,12 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone, timedelta
 try:
+    from .walk_forward import replay as replay_strategy
     from .strategy_validation import validate as validate_strategy
     from .corporate_actions import for_stock, adjust
     from .market_calendar import load_calendar, next_sessions, is_session
 except ImportError:
+    from walk_forward import replay as replay_strategy
     from strategy_validation import validate as validate_strategy
     from corporate_actions import for_stock, adjust
     from market_calendar import load_calendar, next_sessions, is_session
@@ -222,7 +224,8 @@ def analyze(sid,exchange):
         alerts.append('官方快照包含交易制度風險關鍵字，先核對公告；暫停價位計畫。')
         can_predict=False
     result=dict(pipelineVersion='calendar-actions-v4',id=sid,exchange=exchange,bars=bars[-120:],historyCount=len(clean),technical=tech,fundamental=fund,forecasts=forecast(clean,tech) if can_predict else [],alerts=alerts,planEnabled=can_predict,historySources=sources,asOf=bars[-1]['date'],fetchedAt=datetime.now(TZ).isoformat(),model='透明規則 v4（中性修正／部分公司行動還原）；尚未經前瞻驗證' if applied else '透明規則 v4（中性修正／原始價格）；尚未經前瞻驗證',adjusted=False,adjustment=dict(applied=bool(applied),events=applied,unresolved=unresolved,coverage=action_meta['coverage']),adjustedBars=adjusted_bars[-120:],corporateActions=events,actionMetadata=action_meta,nextSessions=forward)
-    result['featureVersion']='integrated-v1'
+    result['featureVersion']='replay-v1'
+    result['walkForward']=replay_strategy(bars,indicators,load_calendar(),events) if not coverage_failed and not failed else None
     result['strategyValidation']=validate_strategy(clean,indicators,events) if not unresolved and not coverage_failed and not failed else None
     with RESULT_LOCK:RESULT_CACHE[key]=(time.monotonic(),result)
     return result
