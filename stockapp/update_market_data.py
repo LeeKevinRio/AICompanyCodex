@@ -1,5 +1,5 @@
 """Refresh public schedule/actions. No account or portfolio data."""
-import concurrent.futures,json,urllib.request
+import concurrent.futures,json,urllib.request,urllib.parse
 from datetime import datetime,timedelta
 from pathlib import Path
 try:
@@ -48,7 +48,24 @@ def merge_action_snapshot(old,new,failed,stamp):
         result['sources']=list(dict.fromkeys(old.get('sources',[])+new.get('sources',[])))
         if any('TWT49U' in u for u in failed_keys):
             result['historyFrom']=old.get('historyFrom');result['historyTo']=old.get('historyTo')
+        if any('exDailyQ' in u for u in failed_keys):
+            result['otcHistoryFrom']=old.get('otcHistoryFrom');result['otcHistoryTo']=old.get('otcHistoryTo')
     return result
+
+def parse_otc_history(payload,source,start,end):
+    if not isinstance(payload,dict) or str(payload.get('stat','')).lower()!='ok' or payload.get('date')!=start.replace('-','')+'~'+end.replace('-',''):
+        raise ValueError('Unconfirmed OTC date coverage')
+    tables=payload.get('tables',[])
+    if not tables:raise ValueError('Missing OTC history table')
+    events=[]
+    for table in tables:
+        rows=table.get('data',[])
+        if table.get('fields',[])[:5]!=['除權息日期','代號','名稱','除權息前收盤價','除權息參考價'] or table.get('totalCount')!=len(rows):raise ValueError('Incomplete OTC history schema or pages')
+        for row in rows:
+            day=iso_date(row[0]);previous=numeric(row[3]);reference=numeric(row[4])
+            if not day or not start<=day<=end or not previous or not reference:raise ValueError('Invalid OTC reference')
+            events.append(dict(id=row[1].strip(),date=day,exchange='otc',kind=row[8],previousClose=previous,referencePrice=reference,source=source))
+    return events
 
 def parse_reference_table(payload,source,kind):
     if not isinstance(payload,dict) or payload.get('stat')!='OK':
@@ -72,8 +89,9 @@ def refresh():
     upcoming='https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL'
     otc='https://www.tpex.org.tw/openapi/v1/tpex_exright_daily'
     otc_next='https://www.tpex.org.tw/openapi/v1/tpex_exright_prepost'
+    otc_historic='https://www.tpex.org.tw/www/zh-tw/bulletin/exDailyQ?'+urllib.parse.urlencode({'startDate':start.strftime('%Y/%m/%d'),'endDate':today.strftime('%Y/%m/%d'),'response':'json'})
     references={f'https://www.twse.com.tw/rwd/zh/{path}?startDate={start:%Y%m%d}&endDate={today:%Y%m%d}&response=json':kind for path,kind in [('split/TWTCAU','ETF分割／反分割'),('change/TWTB8U','變更面額'),('reducation/TWTAUU','減資恢復交易')]}
-    urls=[SOURCE,historic,upcoming,otc,otc_next,*references];data={};errors=[]
+    urls=[SOURCE,historic,upcoming,otc,otc_next,otc_historic,*references];data={};errors=[]
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
         futures={pool.submit(fetch,u):u for u in urls}
         for f,u in futures.items():
@@ -106,6 +124,10 @@ def refresh():
     for r in data.get(upcoming,[]):add(dict(id=r.get('Code'),date=iso_date(r.get('Date')),exchange='tse',kind=r.get('Exdividend','除權息'),cashDividend=numeric(r.get('CashDividend')),source=upcoming))
     for r in data.get(otc,[]):add(dict(id=r.get('SecuritiesCompanyCode'),date=iso_date(r.get('Date')),exchange='otc',kind=r.get('ExRightsDiviend','除權息'),previousClose=numeric(r.get('ClosePriceBeforeExRightsDiviend')),referencePrice=numeric(r.get('ExRightsDiviendQuote')),source=otc))
     for r in data.get(otc_next,[]):add(dict(id=r.get('SecuritiesCompanyCode'),date=iso_date(r.get('ExRrightsExDividendDate')),exchange='otc',kind=r.get('ExRrightsExDividend','除權息'),source=otc_next))
+    if otc_historic in data:
+        try:
+            for event in parse_otc_history(data[otc_historic],otc_historic,start.isoformat(),today.isoformat()):add(event)
+        except (ValueError,TypeError,KeyError,IndexError):errors.append(otc_historic);data.pop(otc_historic,None)
     for url,kind in references.items():
         if url not in data:continue
         try:
@@ -118,6 +140,7 @@ def refresh():
     out={}
     if events or old or any(u in data for u in [historic,upcoming,otc,otc_next]):
         out=dict(version=1,fetchedAt=stamp,historyFrom=start.isoformat() if historic not in errors else None,historyTo=today.isoformat() if historic not in errors else None,events=list(events.values()),sources=list(data),errors=errors)
+        out.update(otcHistoryFrom=start.isoformat() if otc_historic not in errors else None,otcHistoryTo=today.isoformat() if otc_historic not in errors else None)
         out=merge_action_snapshot(old,out,[u for u in errors if u!=SOURCE],stamp)
         out['sourceStatus']=source_health(old,urls,errors,stamp,out['events'])
         write_json(action_file,out)

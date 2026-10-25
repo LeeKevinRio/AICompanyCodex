@@ -9,9 +9,11 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone, timedelta
 try:
+    from .strategy_validation import validate as validate_strategy
     from .corporate_actions import for_stock, adjust
     from .market_calendar import load_calendar, next_sessions, is_session
 except ImportError:
+    from strategy_validation import validate as validate_strategy
     from corporate_actions import for_stock, adjust
     from market_calendar import load_calendar, next_sessions, is_session
 TZ=timezone(timedelta(hours=8))
@@ -211,13 +213,16 @@ def analyze(sid,exchange):
     try:action_stale=(datetime.now(TZ)-datetime.fromisoformat(action_meta['fetchedAt'])).total_seconds()>172800
     except (TypeError,ValueError,KeyError):pass
     if action_stale:alerts.append('公司行動快照超過2日或未取得，暫停情境及價位；請更新官方資料。')
-    coverage_failed=exchange=='tse' and (not action_meta.get('historyFrom') or action_meta['historyFrom']>bars[0]['date'] or action_meta.get('historyTo','')<bars[-1]['date'])
-    if coverage_failed:alerts.append('上市除權息歷史未涵蓋本段日線，暫停情境與價位。')
-    if exchange=='otc':alerts.append('上櫃僅有近期公司行動快照，歷史指標仍可能受未還原除權息影響。')
+    coverage_start=action_meta.get('historyFrom' if exchange=='tse' else 'otcHistoryFrom');coverage_end=action_meta.get('historyTo' if exchange=='tse' else 'otcHistoryTo')
+    coverage_failed=not coverage_start or coverage_start>bars[0]['date'] or not coverage_end or coverage_end<bars[-1]['date']
+    if coverage_failed:alerts.append('所屬市場除權息歷史未涵蓋本段日線，暫停情境與價位。')
+    if exchange=='otc':alerts.append('上櫃依已確認日期範圍還原除權息，拆股及減資仍未完整涵蓋。')
     can_predict=not coverage_failed and tech is not None and age<=7 and failed==0 and not unresolved and not upcoming and not action_stale and forward is not None
     if any(a['riskFlag'] for a in fund['announcements']):
         alerts.append('官方快照包含交易制度風險關鍵字，先核對公告；暫停價位計畫。')
         can_predict=False
     result=dict(pipelineVersion='calendar-actions-v4',id=sid,exchange=exchange,bars=bars[-120:],historyCount=len(clean),technical=tech,fundamental=fund,forecasts=forecast(clean,tech) if can_predict else [],alerts=alerts,planEnabled=can_predict,historySources=sources,asOf=bars[-1]['date'],fetchedAt=datetime.now(TZ).isoformat(),model='透明規則 v4（中性修正／部分公司行動還原）；尚未經前瞻驗證' if applied else '透明規則 v4（中性修正／原始價格）；尚未經前瞻驗證',adjusted=False,adjustment=dict(applied=bool(applied),events=applied,unresolved=unresolved,coverage=action_meta['coverage']),adjustedBars=adjusted_bars[-120:],corporateActions=events,actionMetadata=action_meta,nextSessions=forward)
+    result['featureVersion']='integrated-v1'
+    result['strategyValidation']=validate_strategy(clean,indicators,events) if not unresolved and not coverage_failed and not failed else None
     with RESULT_LOCK:RESULT_CACHE[key]=(time.monotonic(),result)
     return result

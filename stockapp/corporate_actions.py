@@ -37,4 +37,4 @@ def adjust(bars,events):
 
 def for_stock(sid,exchange):
     d=snapshot();events=[e for e in d.get('events',[]) if e['id']==sid and e['exchange']==exchange]
-    return events,dict(fetchedAt=d.get('fetchedAt'),sources=d.get('sources',[]),errors=d.get('errors',[]),historyFrom=d.get('historyFrom'),historyTo=d.get('historyTo'),coverage='上市除權息、ETF分割及面額變更歷史；減資僅標記待核對；上櫃僅近期快照')
+    return events,dict(fetchedAt=d.get('fetchedAt'),sources=d.get('sources',[]),errors=d.get('errors',[]),historyFrom=d.get('historyFrom'),historyTo=d.get('historyTo'),otcHistoryFrom=d.get('otcHistoryFrom'),otcHistoryTo=d.get('otcHistoryTo'),coverage='上市除權息、ETF分割及面額變更歷史；減資僅標記待核對；上櫃除權息歷史，依實際日期涵蓋')

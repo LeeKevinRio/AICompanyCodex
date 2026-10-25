@@ -62,3 +62,6 @@
 
 ## 2026-10-19 公司行動擴充
 新增TWSE官方 /rwd/zh/split/TWTCAU、/change/TWTB8U、/reducation/TWTAUU，使用startDate／endDate。分割及面額變更以官方前收與參考價作部分價格還原；減資僅標待核對並停用區間情境。模型／pipeline v3，保留原始OHLC與成交量。仍缺上櫃完整歷史及臨時休市，不是完整總報酬。80項測試通過，見round-020。
+
+## 2026-10-25整合更新
+新增每日執行紀錄、共同帳戶風險試算、固定v4留出檢查及研究摘要；上櫃除權息歷史採官方exDailyQ，核對日期／表頭／筆數。分析featureVersion integrated-v1觸發快取重取。個人帳戶計畫及每日紀錄只存在本機瀏覽器，清除資料會遺失；不能當作下單、真實資金預占或策略優勢證明。105項測試及實際限制見project/acceptance/round-034.md。
