@@ -86,6 +86,11 @@ def ema(values,period):
     for v in values[1:]:output.append(v*a+output[-1]*(1-a))
     return output
 
+def compare_signal(a,b,scale=0):
+    # Numerical tolerance only; not a tuned trading threshold.
+    tolerance=max(abs(a),abs(b),abs(scale),1)*1e-9
+    return 1 if a-b>tolerance else -1 if b-a>tolerance else 0
+
 def indicators(bars):
     if len(bars)<60:return None
     close=[b['close'] for b in bars];p=close[-1]
@@ -102,16 +107,16 @@ def indicators(bars):
     average_volume=statistics.mean(volumes) if len(volumes)==20 else None
     vr=bars[-1]['volume']/average_volume if bars[-1]['volume'] is not None and average_volume and average_volume>0 else None
     fast,slow=ema(close,12),ema(close,26);macd=[a-b for a,b in zip(fast,slow)];signal=ema(macd,9)
-    score=50+(15 if p>ma['20'] else -15)+(10 if ma['5']>ma['20'] else -10)+(10 if ma['20']>ma['60'] else -10)+(5 if macd[-1]>signal[-1] else -5)
+    score=50+15*compare_signal(p,ma['20'])+10*compare_signal(ma['5'],ma['20'])+10*compare_signal(ma['20'],ma['60'])+5*compare_signal(macd[-1],signal[-1],p)
     return5=(p/close[-6]-1)*100
-    score+=(10 if p>ma['5'] else -10)+(5 if return5>0 else -5)
-    if vr and vr>=1.5 and p<close[-2]:score-=15
+    score+=10*compare_signal(p,ma['5'])+5*compare_signal(p,close[-6])
+    if vr and vr>=1.5 and compare_signal(p,close[-2])<0:score-=15
     if rsi>=70:score-=5
     score=max(0,min(100,score))
     bias='偏多' if score>=65 else '偏空' if score<=35 else '震盪'
-    reasons=[f"收盤 {'高於' if p>ma['20'] else '低於'} 20 日均線",f"5 日均線 {'高於' if ma['5']>ma['20'] else '低於'} 20 日均線",f"20 日均線 {'高於' if ma['20']>ma['60'] else '低於'} 60 日均線"]
-    reasons.append(f"收盤 {'高於' if p>ma['5'] else '低於'} 5 日均線；5 日報酬 {return5:.2f}%")
-    if vr and vr>=1.5 and p<close[-2]:reasons.append('放量下跌，短線風險分數扣15分')
+    reasons=[f"收盤 {'高於' if compare_signal(p,ma['20'])>0 else '低於' if compare_signal(p,ma['20'])<0 else '等於'} 20 日均線",f"5 日均線 {'高於' if compare_signal(ma['5'],ma['20'])>0 else '低於' if compare_signal(ma['5'],ma['20'])<0 else '等於'} 20 日均線",f"20 日均線 {'高於' if compare_signal(ma['20'],ma['60'])>0 else '低於' if compare_signal(ma['20'],ma['60'])<0 else '等於'} 60 日均線"]
+    reasons.append(f"收盤 {'高於' if compare_signal(p,ma['5'])>0 else '低於' if compare_signal(p,ma['5'])<0 else '等於'} 5 日均線；5 日報酬 {return5:.2f}%")
+    if vr and vr>=1.5 and compare_signal(p,close[-2])<0:reasons.append('放量下跌，短線風險分數扣15分')
     return dict(score=score,bias=bias,ma=ma,rsi=rsi,atr=atr,atrPercent=atr/p*100,return5=return5,volumeRatio=vr,macd=macd[-1],macdSignal=signal[-1],support=min(b['low'] for b in bars[-20:]),resistance=max(b['high'] for b in bars[-20:]),reasons=reasons,asOf=bars[-1]['date'])
 
 def quantile(values,q):
@@ -213,6 +218,6 @@ def analyze(sid,exchange):
     if any(a['riskFlag'] for a in fund['announcements']):
         alerts.append('官方快照包含交易制度風險關鍵字，先核對公告；暫停價位計畫。')
         can_predict=False
-    result=dict(pipelineVersion='calendar-actions-v3',id=sid,exchange=exchange,bars=bars[-120:],historyCount=len(clean),technical=tech,fundamental=fund,forecasts=forecast(clean,tech) if can_predict else [],alerts=alerts,planEnabled=can_predict,historySources=sources,asOf=bars[-1]['date'],fetchedAt=datetime.now(TZ).isoformat(),model='透明規則 v3（部分公司行動還原）；尚未經前瞻驗證' if applied else '透明規則 v1；尚未經前瞻驗證',adjusted=False,adjustment=dict(applied=bool(applied),events=applied,unresolved=unresolved,coverage=action_meta['coverage']),adjustedBars=adjusted_bars[-120:],corporateActions=events,actionMetadata=action_meta,nextSessions=forward)
+    result=dict(pipelineVersion='calendar-actions-v4',id=sid,exchange=exchange,bars=bars[-120:],historyCount=len(clean),technical=tech,fundamental=fund,forecasts=forecast(clean,tech) if can_predict else [],alerts=alerts,planEnabled=can_predict,historySources=sources,asOf=bars[-1]['date'],fetchedAt=datetime.now(TZ).isoformat(),model='透明規則 v4（中性修正／部分公司行動還原）；尚未經前瞻驗證' if applied else '透明規則 v4（中性修正／原始價格）；尚未經前瞻驗證',adjusted=False,adjustment=dict(applied=bool(applied),events=applied,unresolved=unresolved,coverage=action_meta['coverage']),adjustedBars=adjusted_bars[-120:],corporateActions=events,actionMetadata=action_meta,nextSessions=forward)
     with RESULT_LOCK:RESULT_CACHE[key]=(time.monotonic(),result)
     return result

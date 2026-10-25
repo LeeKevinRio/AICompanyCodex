@@ -1,6 +1,15 @@
 const test=require('node:test'),assert=require('node:assert/strict');const {capture,evaluate}=require('../prediction-model.js');
 const a={id:'2330',exchange:'tse',asOf:'2026-10-16',model:'rules-v1',planEnabled:true,adjusted:false,technical:{score:80,reasons:['MA']},forecasts:[{days:3,bias:'偏多'},{days:5,bias:'偏多'}],bars:[{date:'2026-10-16',close:100}]};
 const bars=[...a.bars,...[19,20,21,22,23].map((d,i)=>({date:`2026-10-${d}`,close:101+i}))];
+
+test('有官方日曆時阻止過時日線補建新版本預測，合法開盤前仍能建立',()=>{
+ global.CalendarModel=require('../calendar-model.js');
+ const calendar={years:[2026],closed:{},opened:{},unknown:{}};
+ assert.equal(capture(a,'2026-10-20T12:00:00Z',calendar).length,0);
+ assert.equal(capture(a,'2026-10-17T04:00:00Z',calendar).length,2);
+ assert.equal(capture(a,'2026-10-19T01:00:00Z',calendar).length,0);
+ assert.equal(capture(a,'2026-10-18T23:59:00Z',calendar).length,2);
+});
 test('週末建立只記錄當時方向與基準，不改原資料',()=>{const r=capture(a,'2026-10-17T04:00:00Z');assert.equal(r.length,2);a.forecasts[0].bias='偏空';assert.equal(r[0].bias,'偏多');a.forecasts[0].bias='偏多';assert.equal(r[0].baseClose,100);assert.deepEqual(capture({...a,planEnabled:false}),[])});
 test('3與5交易日分開，到期只用各自第一個窗口',()=>{const r=capture(a,'2026-10-17T04:00:00Z');assert.equal(evaluate(r[0],bars).endDate,'2026-10-21');assert.equal(evaluate(r[1],bars).endDate,'2026-10-23');assert.equal(evaluate(r[1],bars).return,5.000000000000004);assert.equal(evaluate(r[1],bars.slice(0,3)).status,'等待到期 2/5')});
 test('事後補建或盤中已走部分報酬的紀錄不能算命中',()=>{for(const time of ['2026-10-20T12:00:00Z','2026-10-19T02:00:00Z'])assert.equal(evaluate(capture(a,time)[0],bars).status,'建立過晚，不納入');assert.equal(evaluate(capture(a,'2026-10-18T23:00:00Z')[0],bars).status,'已到期')});

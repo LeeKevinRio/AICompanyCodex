@@ -1,7 +1,8 @@
 (function(root){
  const taipei=iso=>{const d=new Date(iso);return {date:d.toLocaleDateString('en-CA',{timeZone:'Asia/Taipei'}),time:d.toLocaleTimeString('en-GB',{timeZone:'Asia/Taipei',hour12:false})}};
- function capture(a,recordedAt=new Date().toISOString()){
+ function capture(a,recordedAt=new Date().toISOString(),calendar=null){
   if(!a?.planEnabled||!a.bars?.length)return [];
+  if(calendar){const next=root.CalendarModel.nextDates(a.asOf,1,calendar),created=taipei(recordedAt);if(!next||next[0]<created.date||(next[0]===created.date&&created.time>='09:00:00'))return [];}
   const b=a.bars.findLast(b=>b.date===a.asOf);if(!b||!(b.close>0))return [];
   return (a.forecasts||[]).filter(f=>[3,5].includes(f.days)&&['偏多','偏空','震盪'].includes(f.bias)).map(f=>({key:`stock:${a.id}:${a.asOf}:${f.days}:${a.model}`,kind:'stock',id:a.id,exchange:a.exchange,asOf:a.asOf,days:f.days,bias:f.bias,baseClose:b.close,recordedAt,model:a.model,adjusted:a.adjusted===true,evidence:{score:a.technical?.score,sampleCount:f.sampleCount,reasons:[...(a.technical?.reasons||[])]},members:null}));
  }
