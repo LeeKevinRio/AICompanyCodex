@@ -7,7 +7,7 @@ except ImportError:
     from corporate_actions import adjust
     from market_calendar import next_sessions
 
-def replay(bars,indicator,calendar,events=(),days=30):
+def replay(bars,indicator,calendar,events=(),days=90):
     if not isinstance(days,int) or not 1<=days<=120:raise ValueError('Invalid replay length')
     predictions=[]
     start=max(59,len(bars)-days)
