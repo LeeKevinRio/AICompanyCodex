@@ -8,7 +8,7 @@ except ImportError:
     from market_calendar import next_sessions
 
 def replay(bars,indicator,calendar,events=(),days=90):
-    if not isinstance(days,int) or not 1<=days<=120:raise ValueError('Invalid replay length')
+    if not isinstance(days,int) or not 1<=days<=365:raise ValueError('Invalid replay length')
     predictions=[]
     start=max(59,len(bars)-days)
     # Phase 1 never reads a future bar or a future action to choose a direction.
@@ -30,7 +30,7 @@ def replay(bars,indicator,calendar,events=(),days=90):
             row={**p,'days':horizon,'status':'等待到期','return':None,'hit':None,'realized':None}
             expected=next_sessions(date.fromisoformat(p['asOf']),horizon,calendar)
             row['endDate']=expected[-1] if expected else None
-            if not p['bias']:row['status']='不評估：'+p['reason']
+            if not p['bias']:row['status']='不評估：'+(p['reason'] or '訊號不明，觀察')
             elif not expected:row['status']='交易日曆不足'
             elif any(d not in by_date for d in expected):row['status']='缺指定日線' if bars[-1]['date']>=expected[-1] else '等待到期'
             elif any(p['asOf']<e['date']<=expected[-1] for e in events):row['status']='跨公司行動，排除'

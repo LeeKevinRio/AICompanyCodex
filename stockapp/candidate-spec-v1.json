@@ -1,0 +1,65 @@
+{
+  "id": "CR1",
+  "frozenAt": "2026-10-26T15:12:51+08:00",
+  "note": "Local protocol freeze before first candidate experiment; Git records subsequent revisions. Not a signed timestamp.",
+  "production": "v4 remains unchanged",
+  "testAnchors": 90,
+  "historicalThrough": "2026-10-22",
+  "minimumTrainingSignals": 30,
+  "minimumCoverage": 0.3,
+  "selection": "Choose positive training accuracy edge versus the best constant direction on identical signaled rows; ties by coverage then id. Never select by test result.",
+  "roundTripCostsPercent": [
+    0.2,
+    0.5,
+    1.0
+  ],
+  "rules": [
+    {
+      "id": "reversal3",
+      "days": 3,
+      "name": "3日短期反轉",
+      "rule": "RSI<=30 and close<=MA20-0.5ATR: bullish; RSI>=70 and close>=MA20+0.5ATR: bearish; else abstain"
+    },
+    {
+      "id": "trend3",
+      "days": 3,
+      "name": "3日突破延續",
+      "rule": "MA5>MA20, close>previous 3-bar high, volumeRatio>=1.2: bullish; mirrored bearish; else abstain"
+    },
+    {
+      "id": "selective3",
+      "days": 3,
+      "name": "3日高門檻觀察",
+      "rule": "v4 score>=85: bullish; <=15: bearish; else abstain"
+    },
+    {
+      "id": "reversal5",
+      "days": 5,
+      "name": "5日反轉確認",
+      "rule": "RSI<=35, close<=MA20-1.5ATR and close>previous close: bullish; RSI>=65, close>=MA20+1.5ATR and close<previous close: bearish; else abstain"
+    },
+    {
+      "id": "trend5",
+      "days": 5,
+      "name": "5日趨勢延續",
+      "rule": "MA20>MA60, close>MA20, MACD>signal, volumeRatio>=1: bullish; mirrored bearish; else abstain"
+    },
+    {
+      "id": "selective5",
+      "days": 5,
+      "name": "5日高門檻觀察",
+      "rule": "v4 score>=75: bullish; <=25: bearish; else abstain"
+    }
+  ],
+  "promotion": "No automatic replacement. Require forward evidence after freeze, adequate signaled samples, coverage, baseline and cost comparisons; permit rejection of every candidate.",
+  "forwardGate": {
+    "minimumEligibleDays": 90,
+    "minimumSignals": 30,
+    "minimumCoverage": 0.3,
+    "requirements": [
+      "positive edge versus same-window constant baseline",
+      "positive net return and advantage versus fixed-long after costs",
+      "manual review; no automatic promotion"
+    ]
+  }
+}
