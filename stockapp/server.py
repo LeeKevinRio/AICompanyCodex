@@ -20,6 +20,13 @@ CACHE={}
 MARKET_UPDATE_LOCK=threading.Lock()
 MARKET_LAST_ATTEMPT=0
 MARKET_LAST_ERROR=''
+
+def market_data_needs_refresh(actions,calendar,now):
+    try:
+        if (now-datetime.fromisoformat(actions['fetchedAt'])).total_seconds()>86400:return True
+    except (TypeError,ValueError,KeyError):return True
+    target=now.date() if is_session(now.date(),calendar) and now.strftime('%H:%M')>='14:30' else previous_session(now.date(),calendar)
+    return bool(target and any(not actions.get(k) or actions[k]<target.isoformat() for k in ['historyTo','otcHistoryTo']))
 def update_market_background():
     global MARKET_LAST_ERROR
     if not MARKET_UPDATE_LOCK.acquire(blocking=False):return
@@ -120,9 +127,7 @@ class Handler(SimpleHTTPRequestHandler):
                 except Exception:return self.respond(502,{'error':'官方日曆／公司行動更新失敗，保留既有來源資料。'})
                 finally:MARKET_UPDATE_LOCK.release()
             ctx=calendar_context();actions=action_snapshot()
-            stale=True
-            try:stale=(datetime.now(TZ)-datetime.fromisoformat(actions['fetchedAt'])).total_seconds()>86400
-            except (TypeError,ValueError,KeyError):pass
+            stale=market_data_needs_refresh(actions,ctx.get('calendar'),datetime.now(TZ))
             if stale and time.monotonic()-MARKET_LAST_ATTEMPT>300:
                 MARKET_LAST_ATTEMPT=time.monotonic();threading.Thread(target=update_market_background,daemon=True).start()
             ctx['updating']=MARKET_UPDATE_LOCK.locked();ctx['lastUpdateError']=MARKET_LAST_ERROR;ctx['actions']={k:actions.get(k) for k in ['fetchedAt','historyFrom','historyTo','sources','errors','sourceStatus','lastAttemptAt','otcHistoryFrom','otcHistoryTo']};ctx['update']=update
