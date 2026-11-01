@@ -46,7 +46,8 @@ def parse_cashflows(payload, sid, as_of, source):
         definition='FCF = 累計營業活動淨現金流 − 累計取得不動產、廠房及設備支出；不含未知無形資產支出',
         reason=None, historicalUseAllowed=False,
         publicationNote='date為財報期末，不是公告日期；不可用於歷史回測',
-        documentation='https://finmind.github.io/tutor/TaiwanMarket/Fundamental/')
+        documentation='https://finmind.github.io/tutor/TaiwanMarket/Fundamental/',
+        quarters=quarter_cashflows(rows, source))
 
 
 def _forecast_achievement(sid, exchange, fetch_json):
@@ -75,7 +76,7 @@ def _day(value):
     return date.fromisoformat(str(value)[:10]).isoformat()
 
 
-def build_context(sid, exchange, fetch_json=None, as_of=None):
+def _build_context(sid, exchange, fetch_json=None, as_of=None):
     """Return dated public evidence, without changing a directional signal.
 
     fetch_json loads the labelled FinMind aggregator and official forecast table.
@@ -113,13 +114,14 @@ def build_context(sid, exchange, fetch_json=None, as_of=None):
             parsed = parse_cashflows(fetch_json(url, ttl=21600), sid, as_of, url)
             if parsed:
                 result['cashFlow'] = parsed
+                result['_quarters'] = parsed.get('quarters', [])
                 result['sourceMode'] = 'third_party_aggregator'
                 if parsed['FCF'] < 0:
                     result['strategy']['warnings'].append('累計FCF為負，需查資本支出與營運週期；不直接判定短線偏空')
         except Exception:
             result['strategy']['warnings'].append('現金流來源暫時無法取得，保留未知')
     if str(sid) != '2330' or exchange not in ('tse', 'TWSE'):
-        result['strategy']['warnings'].append('公司IR財測尚未完整接入；財務背景不計入方向分數')
+        result['strategy']['warnings'].append('公司IR財測尚未完整接入；現金流健康依同口徑季度另行檢查')
         return result
     if as_of < '2026-10-15':
         cash['reason'] = '此官方快照發布日晚於指定日期，不提供未發布資訊'
@@ -147,3 +149,45 @@ def build_context(sid, exchange, fetch_json=None, as_of=None):
         cash['status'] = 'stale'
         result['strategy']['warnings'].append('人工核實快照可能過期，需更新官方公告')
     return deepcopy(result)
+
+
+def quarter_cashflows(rows, source):
+    """Convert adjacent calendar-quarter YTD amounts; never compare Q3 YTD to Q2 YTD."""
+    grouped={}
+    for r in rows:
+        try:
+            value=float(r['value']);day=date.fromisoformat(r['date'])
+            if math.isfinite(value) and (day.month,day.day) in [(3,31),(6,30),(9,30),(12,31)]:grouped.setdefault(r['date'],{})[r['type']]=value
+        except (ValueError,KeyError,TypeError):pass
+    result=[]
+    for period,v in sorted(grouped.items()):
+        day=date.fromisoformat(period);q=day.month//3
+        cfo=v.get('CashFlowsFromOperatingActivities',v.get('NetCashInflowFromOperatingActivities'));ppe=v.get('PropertyAndPlantAndEquipment')
+        if cfo is None or ppe is None:continue
+        if q>1:
+            prev_end=date.fromordinal(date(day.year,day.month-2,1).toordinal()-1).isoformat()
+            prev=grouped.get(prev_end,{})
+            pcfo=prev.get('CashFlowsFromOperatingActivities',prev.get('NetCashInflowFromOperatingActivities'));pppe=prev.get('PropertyAndPlantAndEquipment')
+            if pcfo is None or pppe is None:continue
+            cfo-=pcfo;ppe-=pppe
+        if ppe>0:continue
+        result.append(dict(period=f'{day.year}-Q{q}',periodEnd=period,CFO=cfo,PPEcapex=-ppe,FCF=cfo+ppe,unit='NTD',source=source,publishedAt=None,provider='FinMind',derivedFromYTD=q>1))
+    return result
+
+
+def build_context(sid, exchange, fetch_json=None, as_of=None):
+    result=_build_context(sid,exchange,fetch_json,as_of)
+    # Preserve comparable aggregator history even when official single-quarter amounts win display priority.
+    history=result.pop('_quarters',[])
+    if history:result['cashFlow']['quarters']=history
+    cash=result['cashFlow']
+    if cash.get('periodType')=='quarter' and cash.get('unit')=='NTD million' and cash.get('status')=='available':
+        year,q=map(int,cash['period'].replace('-Q','-').split('-'))
+        month=q*3;end=f'{year}-{month:02d}-'+('31' if month in [3,12] else '30')
+        quarter=dict(period=cash['period'],periodEnd=end,CFO=cash['CFO']*1e6,PPEcapex=cash['PPEcapex']*1e6,FCF=cash['FCF']*1e6,unit='NTD',source=cash['source'],publishedAt=cash['publishedAt'],provider=cash['provider'],derivedFromYTD=False)
+        cash['quarters']=sorted([r for r in cash.get('quarters',[]) if r['period']!=quarter['period']]+[quarter],key=lambda r:r['periodEnd'])
+    try:from .financial_signal import health_check
+    except ImportError:from financial_signal import health_check
+    result['health']=health_check(result)
+    result['strategy']['note']='現金流比較可用時，占新v5綜合檢查20%；技術80%。試驗權重未證明可提升3／5日預測'
+    return result

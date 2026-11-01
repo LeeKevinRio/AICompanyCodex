@@ -9,6 +9,14 @@ CAL=dict(years=[2026],closed={},opened={},unknown={})
 def analysis(day='2026-10-27'):
     return dict(id='2330',asOf=day,planEnabled=True,bars=[dict(date=day,close=100)],model='規則v4',technical=dict(score=75,reasons=[]),forecasts=[dict(days=3,bias='偏多'),dict(days=5,bias='偏多')])
 class DailyTests(unittest.TestCase):
+    def test_missing_financial_check_is_explicit_skip_not_fake_forecast(self):
+        with tempfile.TemporaryDirectory() as folder:
+            s=DailyService(Path(folder)/'state.json');s.configure([dict(id='2330',exchange='tse')],True)
+            a=analysis();a['forecasts']=[];a['combinedSignal']=dict(available=False,reason='缺前一季')
+            s.run(lambda *_:a,lambda:CAL,lambda:None,datetime(2026,10,27,17,30,tzinfo=TZ))
+            self.assertEqual(s.state['records'],[])
+            self.assertEqual(s.state['runs'][-1]['rows'][0]['status'],'跳過')
+            self.assertIn('缺前一季',s.state['runs'][-1]['rows'][0]['reason'])
     def test_daily_status_rejects_cross_origin_and_rebound_host(self):
         from stockapp.server import Handler
         for headers,expected in [({'Host':'127.0.0.1:8765'},200),({'Host':'evil.example:8765'},403),({'Host':'127.0.0.1:8765','Origin':'https://evil.example'},403)]:

@@ -12,6 +12,7 @@ try:
     from .walk_forward import replay as replay_strategy
     from .strategy_validation import validate as validate_strategy
     from .candidate_research import study as study_candidates
+    from .financial_signal import combine_signal, MODEL as FINANCIAL_MODEL
     from .financial_context import build_context
     from .historical_evaluation import observations, non_overlapping
     from .corporate_actions import for_stock, adjust
@@ -20,6 +21,7 @@ except ImportError:
     from walk_forward import replay as replay_strategy
     from strategy_validation import validate as validate_strategy
     from candidate_research import study as study_candidates
+    from financial_signal import combine_signal, MODEL as FINANCIAL_MODEL
     from financial_context import build_context
     from historical_evaluation import observations, non_overlapping
     from corporate_actions import for_stock, adjust
@@ -234,7 +236,17 @@ def analyze(sid,exchange):
         alerts.append('官方快照包含交易制度風險關鍵字，先核對公告；暫停價位計畫。')
         can_predict=False
     result=dict(pipelineVersion='calendar-actions-v4',id=sid,exchange=exchange,bars=bars[-120:],historyCount=len(clean),technical=tech,fundamental=fund,forecasts=forecast(bars,tech,load_calendar(),events) if can_predict else [],alerts=alerts,planEnabled=can_predict,historySources=sources,asOf=bars[-1]['date'],fetchedAt=datetime.now(TZ).isoformat(),model='透明規則 v4（中性修正／部分公司行動還原）；尚未經前瞻驗證' if applied else '透明規則 v4（中性修正／原始價格）；尚未經前瞻驗證',adjusted=False,adjustment=dict(applied=bool(applied),events=applied,unresolved=unresolved,coverage=action_meta['coverage']),adjustedBars=adjusted_bars[-120:],corporateActions=events,actionMetadata=action_meta,nextSessions=forward)
-    result['featureVersion']='strict-finance-v1'
+    result['technicalForecasts']=[dict(f) for f in result['forecasts']]
+    result['combinedSignal']=combine_signal(tech,fund.get('context',{}))
+    if not sid.startswith('00'):
+        result['model']=FINANCIAL_MODEL
+        if result['combinedSignal']['available']:
+            for f in result['forecasts']:
+                f['technicalBias']=f['bias'];f['bias']=result['combinedSignal']['bias'];f['referenceModel']='v4 技術類比，非v5歷史績效'
+        else:
+            result['forecasts']=[]
+            alerts.append('現金流同口徑比較未齊，暫不產生v5綜合預測；技術方向僅供參考。')
+    result['featureVersion']='fcf-us-v1'
     result['walkForward']=replay_strategy(bars,indicators,load_calendar(),events) if not coverage_failed and not failed else None
     result['strategyValidation']=validate_strategy(bars,indicators,events,calendar=load_calendar()) if not unresolved and not coverage_failed and not failed else None
     result['candidateResearch']=study_candidates(bars,indicators,load_calendar(),events) if not unresolved and not coverage_failed and not failed else None

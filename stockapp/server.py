@@ -5,11 +5,13 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 try:
+    from .us_market import quote as us_quote
     from .analysis import analyze, RESULT_CACHE
     from .market_calendar import load_calendar, is_session, previous_session, context as calendar_context
     from .update_market_data import refresh as refresh_market_data
     from .corporate_actions import snapshot as action_snapshot
 except ImportError:
+    from us_market import quote as us_quote
     from analysis import analyze, RESULT_CACHE
     from market_calendar import load_calendar, is_session, previous_session, context as calendar_context
     from update_market_data import refresh as refresh_market_data
@@ -149,6 +151,11 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path=='/api/market-snapshot':
             try:return self.respond(200,fetch_market_snapshot())
             except Exception:return self.respond(502,{'error':'族群收盤資料暫時無法取得。'})
+        if parsed.path=='/api/us-quote':
+            symbol=urllib.parse.parse_qs(parsed.query).get('symbol',[''])[0]
+            if not re.fullmatch(r'[A-Z]{1,6}(?:[.-][A-Z]{1,2})?',symbol):return self.respond(400,{'error':'請輸入有效美股代碼'})
+            try:return self.respond(200,us_quote(symbol))
+            except Exception:return self.respond(502,{'error':'美股來源尚無可核對行情或暫時無法連線；未使用示範數據。'})
         if parsed.path=='/api/analysis':
             args=urllib.parse.parse_qs(parsed.query)
             sid=args.get('id',[''])[0];exchange=args.get('exchange',[''])[0]

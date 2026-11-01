@@ -122,7 +122,7 @@ class DailyService:
                             key=f"stock:{t['id']}:{today}:{f['days']}:{a['model']}"
                             if any(r['key']==key for r in self.state['records']):continue
                             if len(self.state['records'])>=10000:raise ValueError('本機紀錄已滿，請備份')
-                            self.state['records'].append(dict(key=key,kind='stock',id=t['id'],exchange=t['exchange'],asOf=today,days=f['days'],bias=f['bias'],baseClose=anchor['close'],recordedAt=created_at.isoformat(),model=a['model'],adjusted=False,evidence=dict(score=a.get('technical',{}).get('score'),reasons=a.get('technical',{}).get('reasons',[]),sampleCount=f.get('sampleCount'),financialContext=a.get('fundamental',{}).get('context')),members=None));created+=1
+                            self.state['records'].append(dict(key=key,kind='stock',id=t['id'],exchange=t['exchange'],asOf=today,days=f['days'],bias=f['bias'],baseClose=anchor['close'],recordedAt=created_at.isoformat(),model=a['model'],adjusted=False,evidence=dict(combinedSignal=a.get('combinedSignal'),score=a.get('technical',{}).get('score'),reasons=a.get('technical',{}).get('reasons',[]),sampleCount=f.get('sampleCount'),financialContext=a.get('fundamental',{}).get('context')),members=None));created+=1
                         research=a.get('candidateResearch') or {}
                         for s in research.get('signals',[]):
                             key=f"candidate:{t['id']}:{today}:{s['days']}:{s['model']}"
@@ -131,6 +131,8 @@ class DailyService:
                             self.state['candidates'].append(dict(key=key,kind='stock',id=t['id'],exchange=t['exchange'],asOf=today,days=s['days'],bias=s['bias'],baseClose=anchor['close'],recordedAt=created_at.isoformat(),model=s['model'],candidateId=s['id'],name=s['name'],protocol=research['protocol'],specHash=research['specHash'],engineHash=research['engineHash'],adjusted=False,evidence={},members=None))
                         actual=[r['days'] for r in self.state['records'] if r['id']==t['id'] and r['asOf']==today and r['model']==a['model']]
                         row['status']=('成功' if created else '已存在，未重複') if 3 in actual and 5 in actual else '失敗'
+                        if row['status']=='失敗' and a.get('combinedSignal',{}).get('available') is False:
+                            row.update(status='跳過',reason='現金流檢查未齊：'+a['combinedSignal'].get('reason','資料不足'))
                         self.save()
                     run['rows'].append(row)
                 except Exception as exc:
