@@ -12,12 +12,16 @@ try:
     from .walk_forward import replay as replay_strategy
     from .strategy_validation import validate as validate_strategy
     from .candidate_research import study as study_candidates
+    from .financial_context import build_context
+    from .historical_evaluation import observations, non_overlapping
     from .corporate_actions import for_stock, adjust
     from .market_calendar import load_calendar, next_sessions, is_session
 except ImportError:
     from walk_forward import replay as replay_strategy
     from strategy_validation import validate as validate_strategy
     from candidate_research import study as study_candidates
+    from financial_context import build_context
+    from historical_evaluation import observations, non_overlapping
     from corporate_actions import for_stock, adjust
     from market_calendar import load_calendar, next_sessions, is_session
 TZ=timezone(timedelta(hours=8))
@@ -129,21 +133,24 @@ def quantile(values,q):
     a=sorted(values);pos=(len(a)-1)*q;i=int(pos)
     return a[i]+(a[min(i+1,len(a)-1)]-a[i])*(pos-i)
 
-def forecast(bars,current):
+def forecast(bars,current,calendar=None,events=()):
+    calendar=load_calendar() if calendar is None else calendar
+    reports=observations(bars,indicators,calendar,events)
     result=[]
     for horizon in [3,5]:
         samples=[];all_returns=[];hits=0;predicted=0
-        # Non-overlapping anchor dates per horizon. All features use only bars <= anchor.
-        for i in range(59,len(bars)-horizon,horizon):
-            past=indicators(bars[:i+1]);ret=bars[i+horizon]['close']/bars[i]['close']-1
+        rows=list(non_overlapping(next(r['rows'] for r in reports if r['days']==horizon)))
+        for row in rows:
+            if row['status']!='已核對':continue
+            ret=row['return']/100
             all_returns.append(ret)
-            realized='偏多' if ret>.005 else '偏空' if ret<-.005 else '震盪'
-            hits+=past['bias']==realized;predicted+=1
-            if past['bias']==current['bias']:samples.append(ret)
+            hits+=row['hit'];predicted+=1
+            if row['bias']==current['bias']:samples.append(ret)
         enough=len(samples)>=5
         hit=hits/predicted*100 if predicted>=30 else None
         baseline=sum(r>.005 for r in all_returns)/predicted*100 if predicted>=30 else None
         result.append(dict(days=horizon,bias=current['bias'],sampleCount=len(samples),evidence=('歷史參考' if len(samples)>=30 else '初步歷史區間') if enough else '同類樣本過少',medianReturn=quantile(samples,.5)*100 if enough else None,lowReturn=quantile(samples,.2)*100 if enough else None,highReturn=quantile(samples,.8)*100 if enough else None,reviewCount=predicted,reviewHitRate=hit,alwaysUpHitRate=baseline,validation='回顧樣本不足' if hit is None else '未優於偏多基準' if hit<=baseline else '回顧高於基準，仍待前瞻驗證',probability=None))
+        result[-1].update(reviewPendingCount=sum(r['status']=='等待到期' for r in rows),reviewExcludedCount=sum(r['status'] not in ['已核對','等待到期'] for r in rows),evaluationVersion='scheduled-window-v1')
     return result
 
 def get_field(row,*names):
@@ -181,6 +188,7 @@ def fundamentals(sid,exchange):
     if fin and fin['netProfit'] is not None:components.append(('累計淨利正負',75 if fin['netProfit']>0 else 25 if fin['netProfit']<0 else 50))
     output['score']=round(statistics.mean(x[1] for x in components)) if len(components)>=2 else None
     output['scoreComponents']=[dict(name=n,score=s) for n,s in components]
+    output['context']=build_context(sid,exchange,None if sid.startswith('00') else fetch_json,datetime.now(TZ).date())
     return output
 
 def analyze(sid,exchange):
@@ -225,10 +233,10 @@ def analyze(sid,exchange):
     if any(a['riskFlag'] for a in fund['announcements']):
         alerts.append('官方快照包含交易制度風險關鍵字，先核對公告；暫停價位計畫。')
         can_predict=False
-    result=dict(pipelineVersion='calendar-actions-v4',id=sid,exchange=exchange,bars=bars[-120:],historyCount=len(clean),technical=tech,fundamental=fund,forecasts=forecast(clean,tech) if can_predict else [],alerts=alerts,planEnabled=can_predict,historySources=sources,asOf=bars[-1]['date'],fetchedAt=datetime.now(TZ).isoformat(),model='透明規則 v4（中性修正／部分公司行動還原）；尚未經前瞻驗證' if applied else '透明規則 v4（中性修正／原始價格）；尚未經前瞻驗證',adjusted=False,adjustment=dict(applied=bool(applied),events=applied,unresolved=unresolved,coverage=action_meta['coverage']),adjustedBars=adjusted_bars[-120:],corporateActions=events,actionMetadata=action_meta,nextSessions=forward)
-    result['featureVersion']='research-cr1-v2'
+    result=dict(pipelineVersion='calendar-actions-v4',id=sid,exchange=exchange,bars=bars[-120:],historyCount=len(clean),technical=tech,fundamental=fund,forecasts=forecast(bars,tech,load_calendar(),events) if can_predict else [],alerts=alerts,planEnabled=can_predict,historySources=sources,asOf=bars[-1]['date'],fetchedAt=datetime.now(TZ).isoformat(),model='透明規則 v4（中性修正／部分公司行動還原）；尚未經前瞻驗證' if applied else '透明規則 v4（中性修正／原始價格）；尚未經前瞻驗證',adjusted=False,adjustment=dict(applied=bool(applied),events=applied,unresolved=unresolved,coverage=action_meta['coverage']),adjustedBars=adjusted_bars[-120:],corporateActions=events,actionMetadata=action_meta,nextSessions=forward)
+    result['featureVersion']='strict-finance-v1'
     result['walkForward']=replay_strategy(bars,indicators,load_calendar(),events) if not coverage_failed and not failed else None
-    result['strategyValidation']=validate_strategy(clean,indicators,events) if not unresolved and not coverage_failed and not failed else None
+    result['strategyValidation']=validate_strategy(bars,indicators,events,calendar=load_calendar()) if not unresolved and not coverage_failed and not failed else None
     result['candidateResearch']=study_candidates(bars,indicators,load_calendar(),events) if not unresolved and not coverage_failed and not failed else None
     with RESULT_LOCK:RESULT_CACHE[key]=(time.monotonic(),result)
     return result

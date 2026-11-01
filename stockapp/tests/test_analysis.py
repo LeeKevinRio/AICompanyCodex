@@ -3,8 +3,14 @@ from datetime import datetime, timedelta
 from unittest.mock import patch
 from stockapp.analysis import indicators, forecast, parse_bars, numeric, roc_date, TZ, analyze, RESULT_CACHE
 
+CAL=dict(years=[2026,2027],closed={},opened={},unknown={})
 def bars(n=240,step=.5):
-    return [dict(date=f'2026-{i//28+1:02d}-{i%28+1:02d}',open=100+i*step,high=102+i*step,low=98+i*step,close=100+i*step,volume=10000,note='') for i in range(n)]
+    result=[];day=datetime(2026,1,2)
+    while len(result)<n:
+        if day.weekday()<5:
+            i=len(result);result.append(dict(date=day.date().isoformat(),open=100+i*step,high=102+i*step,low=98+i*step,close=100+i*step,volume=10000,note=''))
+        day+=timedelta(days=1)
+    return result
 
 class AnalysisTests(unittest.TestCase):
     def test_numeric_and_roc_dates(self):
@@ -36,13 +42,13 @@ class AnalysisTests(unittest.TestCase):
         actual=indicators
         def spy(prefix):
             lengths.append(len(prefix));return actual(prefix)
-        with patch('stockapp.analysis.indicators',side_effect=spy):result=forecast(b,current)
-        expected=list(range(60,len(b)-3+1,3))+list(range(60,len(b)-5+1,5))
+        with patch('stockapp.analysis.indicators',side_effect=spy):result=forecast(b,current,CAL)
+        expected=list(range(60,len(b)+1))
         self.assertEqual(lengths,expected)
         self.assertEqual([f['days'] for f in result],[3,5])
         for f in result:self.assertIsNone(f['probability'])
     def test_small_samples_never_claim_probability_or_hit_rate(self):
-        b=bars(70);result=forecast(b,indicators(b))
+        b=bars(70);result=forecast(b,indicators(b),CAL)
         for f in result:
             self.assertEqual(f['evidence'],'同類樣本過少')
             self.assertIsNone(f['reviewHitRate'])
@@ -50,7 +56,7 @@ class AnalysisTests(unittest.TestCase):
             self.assertIsNone(f['lowReturn'])
     def test_26_samples_show_descriptive_range_without_probability(self):
         b=bars(190)
-        result=forecast(b,indicators(b))
+        result=forecast(b,indicators(b),CAL)
         five=result[1]
         self.assertEqual(five['sampleCount'],26)
         self.assertEqual(five['evidence'],'初步歷史區間')

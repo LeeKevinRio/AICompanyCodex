@@ -20,6 +20,17 @@ CACHE={}
 MARKET_UPDATE_LOCK=threading.Lock()
 MARKET_LAST_ATTEMPT=0
 MARKET_LAST_ERROR=''
+DAILY_SERVICE=None
+
+def daily_refresh():
+    if not MARKET_UPDATE_LOCK.acquire(timeout=60):raise ValueError('官方資料更新尚未完成')
+    try:refresh_market_data();CACHE.clear();RESULT_CACHE.clear()
+    finally:MARKET_UPDATE_LOCK.release()
+
+def daily_worker():
+    while True:
+        DAILY_SERVICE.run(analyze,load_calendar,daily_refresh)
+        threading.Event().wait(60)
 
 def market_data_needs_refresh(actions,calendar,now):
     try:
@@ -118,6 +129,9 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         global MARKET_LAST_ATTEMPT
         parsed=urllib.parse.urlsplit(self.path)
+        if parsed.path=='/api/daily-status':
+            if self.headers.get('Host') not in ['127.0.0.1:8765','localhost:8765'] or self.headers.get('Origin') not in [None,'http://127.0.0.1:8765','http://localhost:8765']:return self.respond(403,{'error':'只接受晴盤本機頁面操作'})
+            return self.respond(200,DAILY_SERVICE.snapshot()) if DAILY_SERVICE else self.respond(503,{'error':'本機背景排程尚未啟動'})
         if parsed.path=='/api/market-context':
             update=None
             if urllib.parse.parse_qs(parsed.query).get('refresh')==['1']:
@@ -147,6 +161,18 @@ class Handler(SimpleHTTPRequestHandler):
         if len(ids)>40 or not all(re.fullmatch(r'(?:[0-9]{4,6}[A-Z]?|t00|o00)',sid) for sid in ids):return self.respond(400,{'error':'請使用有效台股代碼，每次最多 40 檔。'})
         try:self.respond(200,fetch_quotes(ids))
         except Exception:self.respond(502,{'error':'行情來源暫時無法回應，請稍後重試；不使用示範价格補值。'})
+    def do_POST(self):
+        if self.path not in ['/api/daily-config','/api/daily-run']:return self.respond(404,{'error':'找不到操作'})
+        if self.headers.get('Origin') not in ['http://127.0.0.1:8765','http://localhost:8765'] or self.headers.get('Host') not in ['127.0.0.1:8765','localhost:8765'] or self.headers.get('Content-Type','').split(';')[0]!='application/json':return self.respond(403,{'error':'只接受晴盤本機頁面操作'})
+        if not DAILY_SERVICE:return self.respond(503,{'error':'本機背景排程尚未啟動'})
+        try:
+            size=int(self.headers.get('Content-Length','0'))
+            if not 0<size<=20000:raise ValueError('請求大小無效')
+            body=json.loads(self.rfile.read(size))
+            if self.path=='/api/daily-config':DAILY_SERVICE.configure(body['targets'],body['enabled'])
+            else:threading.Thread(target=DAILY_SERVICE.run,args=(analyze,load_calendar,daily_refresh),kwargs={'force':True},daemon=True).start()
+            return self.respond(200,DAILY_SERVICE.snapshot())
+        except Exception:return self.respond(400,{'error':'本機排程操作失敗，請檢查追蹤名單或儲存狀態'})
     def respond(self,status,payload):
         body=json.dumps(payload,ensure_ascii=False,allow_nan=False).encode('utf-8')
         self.send_response(status)
@@ -156,6 +182,10 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 if __name__=='__main__':
+    try:from .daily_service import DailyService
+    except ImportError:from daily_service import DailyService
+    DAILY_SERVICE=DailyService()
     server=ThreadingHTTPServer(('127.0.0.1',8765),partial(Handler,directory=str(Path(__file__).parent)))
+    threading.Thread(target=daily_worker,daemon=True).start()
     print('ClearSignal: http://127.0.0.1:8765',flush=True)
     server.serve_forever()
